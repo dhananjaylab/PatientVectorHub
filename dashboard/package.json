@@ -1,0 +1,36 @@
+{
+  "name": "pvh-dashboard",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev":     "vite --port 5173",
+    "build":   "tsc && vite build",
+    "preview": "vite preview",
+    "lint":    "eslint src/ --ext .ts,.tsx --max-warnings 0",
+    "format":  "prettier --write \"src/**/*.{ts,tsx,css}\"",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.45.0",
+    "axios":                 "^1.7.2",
+    "keycloak-js":           "^24.0.4",
+    "react":                 "^18.3.1",
+    "react-dom":             "^18.3.1",
+    "react-router-dom":      "^6.24.0",
+    "zustand":               "^4.5.4"
+  },
+  "devDependencies": {
+    "@playwright/test":              "^1.45.0",
+    "@types/react":                  "^18.3.3",
+    "@types/react-dom":              "^18.3.0",
+    "@typescript-eslint/eslint-plugin": "^7.14.1",
+    "@typescript-eslint/parser":    "^7.14.1",
+    "@vitejs/plugin-react":          "^4.3.1",
+    "eslint":                        "^8.57.0",
+    "eslint-plugin-react-hooks":     "^4.6.2",
+    "prettier":                      "^3.3.2",
+    "typescript":                    "^5.5.2",
+    "vite":                          "^5.3.1"
+  }
+}
