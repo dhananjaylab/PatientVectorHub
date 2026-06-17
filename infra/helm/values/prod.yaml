@@ -1,0 +1,22 @@
+# Helm values — production cluster
+image:
+  registry: ""  # set by deploy.yml: $ECR/pvh-api
+  tag: ""       # set by deploy.yml: $GITHUB_SHA
+  pullPolicy: Always
+
+replicaCount:
+  api:     3
+  workers: 5
+
+resources:
+  api:
+    limits:   { cpu: 2000m, memory: 2Gi }
+    requests: { cpu: 500m, memory: 512Mi }
+  workers:
+    limits:   { cpu: 4000m, memory: 4Gi }
+    requests: { cpu: 1000m, memory: 1Gi }
+
+env:
+  ENVIRONMENT:   production
+  LOG_LEVEL:     INFO
+  VECTOR_BACKEND: weaviate

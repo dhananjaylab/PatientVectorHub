@@ -1,0 +1,154 @@
+{
+  "realm": "patientvectorhub",
+  "enabled": true,
+  "displayName": "PatientVectorHub",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "maxFailureWaitSeconds": 900,
+  "minimumQuickLoginWaitSeconds": 60,
+  "waitIncrementSeconds": 60,
+  "quickLoginCheckMilliSeconds": 1000,
+  "maxDeltaTimeSeconds": 43200,
+  "failureFactor": 10,
+  "accessTokenLifespan": 3600,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 86400,
+  "clients": [
+    {
+      "clientId": "pvh-spa",
+      "name": "PatientVectorHub SPA",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "protocol": "openid-connect",
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "redirectUris": [
+        "http://localhost:5173/*",
+        "http://localhost:3000/*",
+        "https://app.pvh.internal/*"
+      ],
+      "webOrigins": [
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "https://app.pvh.internal"
+      ],
+      "defaultClientScopes": ["openid", "profile", "email", "roles"],
+      "optionalClientScopes": ["address", "phone"]
+    },
+    {
+      "clientId": "pvh-backend",
+      "name": "PatientVectorHub Backend",
+      "enabled": true,
+      "publicClient": false,
+      "bearerOnly": true,
+      "protocol": "openid-connect"
+    }
+  ],
+  "roles": {
+    "realm": [
+      {
+        "name": "admin",
+        "description": "Full access within tenant — manage users, API keys, settings"
+      },
+      {
+        "name": "engineer",
+        "description": "Ingestion, vector store ops, monitoring"
+      },
+      {
+        "name": "analyst",
+        "description": "RAG query execution and result viewing"
+      },
+      {
+        "name": "auditor",
+        "description": "Read-only access to audit logs and compliance reports"
+      },
+      {
+        "name": "readonly",
+        "description": "View-only dashboard access"
+      }
+    ]
+  },
+  "users": [
+    {
+      "username": "admin@tenant1.test",
+      "email": "admin@tenant1.test",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{"type": "password", "value": "test-password-123", "temporary": false}],
+      "realmRoles": ["admin"],
+      "attributes": {"tenant_id": ["00000000-0000-0000-0000-000000000001"]}
+    },
+    {
+      "username": "engineer@tenant1.test",
+      "email": "engineer@tenant1.test",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{"type": "password", "value": "test-password-123", "temporary": false}],
+      "realmRoles": ["engineer"],
+      "attributes": {"tenant_id": ["00000000-0000-0000-0000-000000000001"]}
+    },
+    {
+      "username": "analyst@tenant1.test",
+      "email": "analyst@tenant1.test",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{"type": "password", "value": "test-password-123", "temporary": false}],
+      "realmRoles": ["analyst"],
+      "attributes": {"tenant_id": ["00000000-0000-0000-0000-000000000001"]}
+    },
+    {
+      "username": "auditor@tenant1.test",
+      "email": "auditor@tenant1.test",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{"type": "password", "value": "test-password-123", "temporary": false}],
+      "realmRoles": ["auditor"],
+      "attributes": {"tenant_id": ["00000000-0000-0000-0000-000000000001"]}
+    },
+    {
+      "username": "admin@tenant2.test",
+      "email": "admin@tenant2.test",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{"type": "password", "value": "test-password-123", "temporary": false}],
+      "realmRoles": ["admin"],
+      "attributes": {"tenant_id": ["00000000-0000-0000-0000-000000000002"]}
+    },
+    {
+      "username": "engineer@tenant2.test",
+      "email": "engineer@tenant2.test",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{"type": "password", "value": "test-password-123", "temporary": false}],
+      "realmRoles": ["engineer"],
+      "attributes": {"tenant_id": ["00000000-0000-0000-0000-000000000002"]}
+    }
+  ],
+  "protocolMappers": [
+    {
+      "name": "tenant-id-claim",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-usermodel-attribute-mapper",
+      "consentRequired": false,
+      "config": {
+        "userinfo.token.claim": "true",
+        "user.attribute": "tenant_id",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "claim.name": "tenant_id",
+        "jsonType.label": "String"
+      }
+    }
+  ],
+  "passwordPolicy": "length(8)"
+}
