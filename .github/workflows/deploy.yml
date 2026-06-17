@@ -1,0 +1,66 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        default: dev
+        type: choice
+        options: [dev, staging, production]
+
+jobs:
+  deploy:
+    name: Deploy to ${{ github.event.inputs.environment || 'dev' }}
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE }}
+          aws-region: us-east-1
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push images
+        env:
+          ECR: ${{ steps.ecr-login.outputs.registry }}
+          SHA: ${{ github.sha }}
+        run: |
+          docker build -t $ECR/pvh-api:$SHA     api-gateway/
+          docker build -t $ECR/pvh-workers:$SHA  ingestion/
+          docker build -t $ECR/pvh-embedding:$SHA ingestion/embedding-server/
+          docker push $ECR/pvh-api:$SHA
+          docker push $ECR/pvh-workers:$SHA
+          docker push $ECR/pvh-embedding:$SHA
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --name pvh-${{ github.event.inputs.environment || 'dev' }} \
+            --region us-east-1
+
+      - name: Helm deploy (atomic — auto-rollback on failure)
+        env:
+          ENV: ${{ github.event.inputs.environment || 'dev' }}
+          SHA: ${{ github.sha }}
+          ECR: ${{ steps.ecr-login.outputs.registry }}
+        run: |
+          helm upgrade --install pvh-app ./infra/helm/pvh-app \
+            -f ./infra/helm/values/${ENV}.yaml \
+            --set image.tag=${SHA} \
+            --set image.registry=${ECR} \
+            --namespace pvh-app \
+            --create-namespace \
+            --atomic \
+            --timeout 10m \
+            --wait

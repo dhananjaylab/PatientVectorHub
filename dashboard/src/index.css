@@ -1,0 +1,37 @@
+/* PatientVectorHub — base styles */
+:root {
+  --color-bg:      #0A0F1E;
+  --color-surface: #131929;
+  --color-border:  #1E2A3A;
+  --color-primary: #00B4D8;
+  --color-success: #10B981;
+  --color-warning: #F59E0B;
+  --color-danger:  #EF4444;
+  --color-phi:     #A855F7;
+  --font-mono:     'IBM Plex Mono', 'Fira Code', monospace;
+  --font-sans:     'IBM Plex Sans', 'Inter', system-ui, sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--color-bg);
+  color: #E2E8F0;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* PHI blur — always blur patient data by default */
+.phi-cell {
+  filter: blur(4px);
+  transition: filter 0.2s ease;
+  cursor: pointer;
+}
+.phi-cell:hover { filter: none; }
+
+.mono { font-family: var(--font-mono); }
+.auth-loading { display: flex; align-items: center; justify-content: center;
+                height: 100vh; font-size: 18px; color: var(--color-primary); }
+.error-403 { padding: 2rem; color: var(--color-danger); font-size: 16px; }

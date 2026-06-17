@@ -1,0 +1,171 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint (ruff + mypy + eslint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Python deps
+        run: |
+          pip install ruff mypy \
+            pydantic>=2.0 sqlalchemy>=2.0 fastapi httpx
+
+      - name: Ruff lint
+        run: ruff check .
+
+      - name: Ruff format check
+        run: ruff format --check .
+
+      - name: MyPy
+        run: |
+          mypy api-gateway/src ingestion/src rag-engine/src vector-store/src \
+            --ignore-missing-imports
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: ESLint
+        working-directory: dashboard
+        run: |
+          npm ci --prefer-offline
+          npx eslint src/ --ext .ts,.tsx --max-warnings 0
+
+  test-unit:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install deps
+        run: |
+          pip install pytest pytest-asyncio pytest-cov \
+            fastapi httpx pydantic>=2.0 sqlalchemy>=2.0 \
+            python-jose[cryptography] redis
+
+      - name: Run unit tests
+        env:
+          ENVIRONMENT: test
+          DATABASE_URL: postgresql+asyncpg://pvh:pvh_local@localhost:5432/pvh
+          REDIS_URL: redis://localhost:6379/0
+          VAULT_ADDR: http://localhost:8200
+          VAULT_TOKEN: dev-root-token
+        run: |
+          pytest tests/unit/ -v \
+            --cov=api-gateway/src \
+            --cov-report=xml \
+            --cov-fail-under=60 \
+            -q
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          file: coverage.xml
+        continue-on-error: true
+
+  test-integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: pvh
+          POSTGRES_PASSWORD: pvh_local
+          POSTGRES_DB: pvh
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install deps
+        run: |
+          pip install pytest pytest-asyncio pytest-cov \
+            fastapi httpx pydantic>=2.0 sqlalchemy>=2.0 asyncpg \
+            alembic python-jose[cryptography] redis aiokafka
+
+      - name: Run Alembic migrations
+        env:
+          DATABASE_URL: postgresql+asyncpg://pvh:pvh_local@localhost:5432/pvh
+        run: cd api-gateway && python -m alembic upgrade head
+
+      - name: Run integration tests
+        env:
+          DATABASE_URL: postgresql+asyncpg://pvh:pvh_local@localhost:5432/pvh
+          REDIS_URL: redis://localhost:6379/0
+          ENVIRONMENT: test
+        run: |
+          pytest tests/integration/ -v -m integration --tb=short -q
+
+  security-scan:
+    name: Security Scan (Trivy)
+    runs-on: ubuntu-latest
+    needs: [lint, test-unit]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build API image
+        run: docker build -t pvh-api:${{ github.sha }} api-gateway/
+
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: pvh-api:${{ github.sha }}
+          severity: CRITICAL
+          exit-code: "1"
+          format: table
+
+      - name: Build ingestion image
+        run: docker build -t pvh-ingestion:${{ github.sha }} ingestion/
+
+      - name: Trivy scan ingestion
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: pvh-ingestion:${{ github.sha }}
+          severity: CRITICAL
+          exit-code: "1"
+          format: table
