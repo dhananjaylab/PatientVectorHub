@@ -29,17 +29,25 @@ def create_collections() -> None:
         print("  qdrant-client not installed — skipping Qdrant setup")
         return
 
+    qdrant_url = os.getenv("QDRANT_URL")
+    qdrant_api_key = os.getenv("QDRANT_API_KEY")
+
     for attempt in range(12):
         try:
-            client = QdrantClient(host=QDRANT_HOST, port=6333, timeout=10)
+            if qdrant_url and qdrant_api_key:
+                client = QdrantClient(url=qdrant_url, api_key=qdrant_api_key, timeout=10)
+            else:
+                client = QdrantClient(host=QDRANT_HOST, port=6333, timeout=10)
             client.get_collections()
             break
-        except Exception:
+        except Exception as e:
             if attempt == 11:
-                print(f"  ✗ Qdrant not ready at {QDRANT_HOST}")
+                target_str = qdrant_url if (qdrant_url and qdrant_api_key) else QDRANT_HOST
+                print(f"  ✗ Qdrant not ready at {target_str}: {e}")
                 return
             print(f"  Waiting for Qdrant... ({attempt + 1}/12)")
             time.sleep(5)
+
 
     existing = {c.name for c in client.get_collections().collections}
 

@@ -32,20 +32,33 @@ def create_schema() -> None:
         print("  weaviate-client not installed — skipping schema setup")
         return
 
+    weaviate_url = os.getenv("WEAVIATE_URL")
+    weaviate_api_key = os.getenv("WEAVIATE_API_KEY")
+
     # Wait for Weaviate to be ready
     for attempt in range(12):
         try:
-            client = weaviate.connect_to_local(
-                host=WEAVIATE_HOST, port=WEAVIATE_PORT,
-            )
-            client.is_ready()
-            break
-        except Exception:
+            if weaviate_url and weaviate_api_key:
+                from weaviate.classes.init import Auth
+                client = weaviate.connect_to_weaviate_cloud(
+                    cluster_url=weaviate_url,
+                    auth_credentials=Auth.api_key(weaviate_api_key),
+                )
+            else:
+                client = weaviate.connect_to_local(
+                    host=WEAVIATE_HOST, port=WEAVIATE_PORT,
+                )
+            if client.is_ready():
+                break
+            client.close()
+        except Exception as e:
             if attempt == 11:
-                print(f"  ✗ Weaviate not ready at {WEAVIATE_HOST}:{WEAVIATE_PORT}")
+                target_str = weaviate_url if (weaviate_url and weaviate_api_key) else f"{WEAVIATE_HOST}:{WEAVIATE_PORT}"
+                print(f"  ✗ Weaviate not ready at {target_str}: {e}")
                 return
             print(f"  Waiting for Weaviate... ({attempt + 1}/12)")
             time.sleep(5)
+
 
     existing = {c.name for c in client.collections.list_all().values()}
 
