@@ -26,13 +26,17 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     KAFKA_BROKERS: str = "localhost:9092"
 
-    # ── Vector Stores ─────────────────────────────────────────────────────────
     VECTOR_BACKEND: str = "weaviate"
     WEAVIATE_HOST: str = "localhost"
     WEAVIATE_PORT: int = 8080
     WEAVIATE_GRPC_PORT: int = 50051
+    WEAVIATE_URL: str = ""
+    WEAVIATE_API_KEY: str = ""
     QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6334
+    QDRANT_URL: str = ""
+    QDRANT_API_KEY: str = ""
+
 
     # ── Embedding ─────────────────────────────────────────────────────────────
     EMBEDDING_MODEL_URL: str = "http://localhost:8001"

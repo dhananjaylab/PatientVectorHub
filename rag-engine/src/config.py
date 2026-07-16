@@ -14,9 +14,14 @@ class RAGSettings(BaseSettings):
     VECTOR_BACKEND: str = "weaviate"
     WEAVIATE_HOST: str = "localhost"
     WEAVIATE_PORT: int = 8080
+    WEAVIATE_URL: str = ""
+    WEAVIATE_API_KEY: str = ""
     QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6334
+    QDRANT_URL: str = ""
+    QDRANT_API_KEY: str = ""
     EMBEDDING_MODEL_URL: str = "http://localhost:8001"
+
     EMBEDDING_MODEL_VERSION: str = "clinical-bert-v2.1"
     VAULT_ADDR: str = "http://localhost:8200"
     VAULT_TOKEN: str = "dev-root-token"
