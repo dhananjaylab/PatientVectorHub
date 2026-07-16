@@ -1,253 +1,239 @@
 # PatientVectorHub
 
-Enterprise-scale HIPAA-compliant RAG platform for 1.5B patient documents.
+Enterprise-scale HIPAA-compliant RAG platform for 1.5B patient documents. Designed and optimized for native Windows environments.
 
-## Quick Start (Phase 1)
+---
 
-### Option 1: Docker (Local Development)
+## 🏗️ Architecture Overview
 
-```bash
-# 1. Clone and configure
-git clone https://github.com/your-org/patientvectorhub
-cd patientvectorhub
-cp .env.example .env
-# Edit .env — add your LLM API keys
+All-OSS stack — no paid managed services required:
 
-# 2. Start local stack (all 8 services via Docker)
-make dev          # All 8 services + migrate + seed + setup
+- **API Gateway**: FastAPI + Kong OSS
+- **Auth & Identity**: Keycloak 24 (OIDC PKCE)
+- **Secrets Management**: HashiCorp Vault OSS
+- **Messaging & Ingestion**: Apache Kafka via Strimzi
+- **Database**: PostgreSQL 15 (with Row Level Security)
+- **Primary Vector Store**: Weaviate
+- **Disaster Recovery Vector Store**: Qdrant
+- **Embeddings**: Self-hosted clinical-bert (`emilyalsentzer/Bio_ClinicalBERT`)
+- **LLM Integrations**: Anthropic Claude, OpenAI GPT-4o, Google Gemini
+- **Document & Backup Storage**: Cloudflare R2 / S3-compatible API
+- **Observability**: Prometheus + Grafana + Jaeger + Loki
 
-# 3. Verify
-curl http://localhost:8000/health    # {"status": "alive"}
-curl http://localhost:8000/ready     # {"status": "ready", "checks": {...}}
+---
 
-# 4. Run unit tests
-make test-unit
+## 📋 Prerequisites
 
-# 5. Run integration tests (stack must be running)
-make test-integration
+Before starting, ensure you have the following software installed on Windows:
+
+### Required
+1. **Docker Desktop for Windows**
+   - [Download Docker Desktop](https://www.docker.com/products/docker-desktop)
+   - Ensure the Linux Containers mode is enabled (WSL 2 backend is highly recommended).
+   - Ensure `docker compose` is available: `docker compose version`
+2. **Python 3.9+**
+   - [Download Python](https://www.python.org/downloads/)
+   - **Important**: Make sure to check the box to **"Add Python to PATH"** during installation.
+   - Verify installation: `python --version` & `pip --version`
+3. **Node.js 18+** (Optional, only needed for running the frontend dashboard)
+   - [Download Node.js](https://nodejs.org/)
+
+### Optional
+- **PowerShell 7+** (Provides a superior CLI environment: `winget install Microsoft.PowerShell`)
+- **Make for Windows** (If you prefer using `make` commands: install via Chocolatey `choco install make` or download via MinGW)
+
+---
+
+## 🚀 Setup Guides
+
+Choose one of the two options below depending on your development requirements.
+
+### 🐳 Option A: Docker (Recommended for Local Development)
+
+This launches the full 8-service container stack locally on your Windows machine.
+
+#### 1. Setup Environment
+```cmd
+REM Copy the environment template
+copy .env.example .env
+
+REM Open in Notepad to add your LLM API keys (e.g. ANTHROPIC_API_KEY)
+notepad .env
 ```
 
-### Option 2: Cloud Services (Production-Ready Development)
+#### 2. Start the Local Stack
+Choose the CLI tool you prefer to orchestrate the Docker container setup:
 
-Use managed cloud services for PostgreSQL, Redis, Kafka, Weaviate, and Qdrant:
+- **PowerShell** (Recommended):
+  ```powershell
+  # Set execution policy if you haven't already (run once as user)
+  Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 
-**Quick Start (5 min):** See [CLOUD_QUICKSTART.md](CLOUD_QUICKSTART.md)
+  # Start the development task
+  powershell -ExecutionPolicy Bypass -File scripts\dev.ps1 -Task dev
+  ```
+- **Command Prompt (CMD)**:
+  ```cmd
+  scripts\dev.bat dev
+  ```
+- **Make**:
+  ```cmd
+  make dev
+  ```
 
-**Full Guide:** See [CLOUD_SETUP.md](CLOUD_SETUP.md)
+*Note: The startup process spins up the containers, waits for services to become healthy (~90s), runs migrations, sets up schemas, and seeds synthetic test data.*
 
-```bash
-# 1. Configure cloud endpoints
-cp .env.example.cloud .env
-# Edit with your cloud endpoints
+---
 
-# 2. Initialize services
-python -m alembic upgrade head
-python scripts/seed_data.py
-python scripts/setup_weaviate_schema.py
-python scripts/setup_qdrant_schema.py
-python scripts/create_kafka_topics.py
+### ☁️ Option B: Cloud Services (Production-Ready Development)
 
-# 3. Start local services
-cd ingestion/embedding-server && python main.py   # Terminal 1: Embeddings (port 8001)
-cd api-gateway && uvicorn src.main:app --reload   # Terminal 2: API (port 8000)
+Use this option if you connect to managed cloud services (e.g. RDS PostgreSQL, AWS MSK, Weaviate Cloud, Qdrant Cloud) while running only the FastAPI app and embedding server locally.
 
-# 4. Verify
-curl http://localhost:8000/health
+#### 1. Configure Cloud Endpoints
+```cmd
+copy .env.example.cloud .env
+notepad .env
 ```
+Fill in the cloud endpoint details in `.env`:
+- `DATABASE_URL` / `DATABASE_URL_SYNC` (PostgreSQL)
+- `REDIS_URL` (Redis)
+- `KAFKA_BROKERS` (Kafka broker list)
+- `WEAVIATE_HOST`, `WEAVIATE_PORT`, `WEAVIATE_GRPC_PORT`
+- `QDRANT_HOST`, `QDRANT_PORT`
+- Cloudflare R2 Credentials (`R2_ENDPOINT_URL`, access keys, and buckets)
+- LLM API keys
 
-## Service Endpoints (local)
+#### 2. Install Local Dependencies & Initialize Infrastructure
+```cmd
+REM Install Python dependencies
+pip install -r api-gateway\requirements.txt
+pip install -r ingestion\requirements.txt
+pip install -r rag-engine\requirements.txt
+pip install -r vector-store\requirements.txt
+pip install -r requirements-dev.txt
 
-| Service        | URL                           |
-|----------------|-------------------------------|
-| FastAPI        | http://localhost:8000         |
-| API Docs       | http://localhost:8000/docs    |
-| Keycloak       | http://localhost:8443         |
-| Weaviate       | http://localhost:8080         |
-| Qdrant         | http://localhost:6333         |
-| Vault          | http://localhost:8200         |
-| Kafka          | localhost:9092                |
-| Embedding      | http://localhost:8001         |
-| Dashboard      | http://localhost:5173         |
-
-## Test Credentials
-
-All users have password: `test-password-123`
-
-| Email                    | Role     | Tenant |
-|--------------------------|----------|--------|
-| admin@tenant1.test       | admin    | Acme Health |
-| engineer@tenant1.test    | engineer | Acme Health |
-| analyst@tenant1.test     | analyst  | Acme Health |
-| auditor@tenant1.test     | auditor  | Acme Health |
-| admin@tenant2.test       | admin    | Riverside Medical |
-| engineer@tenant2.test    | engineer | Riverside Medical |
-
-## Implementation Phases
-
-| Phase | Scope                       | Status     |
-|-------|-----------------------------|------------|
-| 1     | Environment Setup           | ✅ Complete |
-| 2     | Database + RLS              | 🔜 Next    |
-| 3     | Auth + RBAC                 | ⬜ Pending |
-| 4     | Ingestion Pipeline          | ⬜ Pending |
-| 5     | Embedding Model Server      | ⬜ Pending |
-| 6     | Vector Store Layer          | ⬜ Pending |
-| 7     | RAG Query Engine            | ⬜ Pending |
-| 8     | REST API + Kong             | ⬜ Pending |
-| 9     | Frontend Dashboard          | ⬜ Pending |
-| 10    | Observability + Security    | ⬜ Pending |
-| 11    | Testing + Load Tests        | ⬜ Pending |
-| 12    | Production Deployment       | ⬜ Pending |
-
-## Developer Workflow
-
-### Quick Commands
-
-| Task | Docker | Cloud |
-|------|--------|-------|
-| Start all services | `make dev` | See [CLOUD_SETUP.md](CLOUD_SETUP.md) |
-| Start minimal stack | `make dev-lite` | Manual setup in [CLOUD_SETUP.md](CLOUD_SETUP.md) |
-| Run tests | `make test-unit` | `pytest tests/unit -v` |
-| View logs | `make logs` | Check service terminals/CloudWatch |
-| Stop services | `make stop` | Ctrl+C in each terminal |
-| Clean volumes | `make clean` | N/A (cloud-managed) |
-
-### Using Make (Docker - Recommended for Local Dev)
-
-```bash
-make help           # All available commands
-make dev            # Start full stack (all 8 services)
-make dev-lite       # Start minimal stack (Postgres, Redis, Weaviate, Kafka, Vault)
-make test-unit      # Fast unit tests (no stack needed)
-make test-rls       # HIPAA gate: tenant isolation must return 0 rows
-make lint           # ruff + mypy + eslint
-make format         # Auto-format all code
-make logs           # Tail container logs
-make clean          # Remove all containers + volumes
-```
-
-### Cloud Services (Production-Ready Development)
-
-**Setup sequence:**
-
-```bash
-# 1. Configure environment
-cp .env.example .env
-# Edit .env with cloud endpoints (PostgreSQL, Redis, Kafka, Weaviate, Qdrant)
-
-# 2. Initialize infrastructure
-python -m alembic upgrade head
-python scripts/seed_data.py
-python scripts/setup_weaviate_schema.py
-python scripts/setup_qdrant_schema.py
-python scripts/create_kafka_topics.py
-
-# 3. Start local services (in separate terminals)
-cd ingestion/embedding-server && python main.py
-cd api-gateway && uvicorn src.main:app --reload
-
-# 4. Verify
-curl http://localhost:8000/health
-pytest tests/integration -v
-```
-
-**See [CLOUD_SETUP.md](CLOUD_SETUP.md) for complete cloud development guide.**
-
-### Manual Commands (Development Phase - Docker)
-
-**All 8 Services + Setup**
-
-```bash
-# 1. Start all 8 containers
-docker compose up -d
-
-# 2. Wait for services to be healthy (check logs if needed)
-docker compose logs -f --tail=50
-
-# 3. Once healthy, run migrations
+REM Run Alembic database migrations
 cd api-gateway
 python -m alembic upgrade head
 cd ..
 
-# 4. Initialize Vault with dev secrets
-bash scripts/vault_init.sh
+REM Seed synthetic database data
+python scripts\seed_data.py
 
-# 5. Create Kafka topics
-python scripts/create_kafka_topics.py
+REM Initialize vector store schemas
+python scripts\setup_weaviate_schema.py
+python scripts\setup_qdrant_schema.py
 
-# 6. Setup vector store schemas
-python scripts/setup_weaviate_schema.py
-python scripts/setup_qdrant_schema.py
-
-# 7. Seed synthetic test data
-python scripts/seed_data.py
-
-# 8. Verify all services
-curl http://localhost:8000/health        # FastAPI
-curl http://localhost:8080/v1/.well-known/ready  # Weaviate
-curl http://localhost:6333/health        # Qdrant
-curl http://localhost:8200/v1/sys/health # Vault (requires token)
+REM Create Kafka topics
+python scripts\create_kafka_topics.py
 ```
 
-**Service-Specific Commands**
+#### 3. Start Local Python Servers
+Open two separate Command Prompt or PowerShell terminals:
 
-```bash
-# View container logs
-docker compose logs -f postgres           # Database
-docker compose logs -f redis              # Cache
-docker compose logs -f kafka              # Message queue
-docker compose logs -f weaviate           # Vector store (primary)
-docker compose logs -f qdrant             # Vector store (DR)
-docker compose logs -f vault              # Secrets
-docker compose logs -f keycloak           # Auth
-docker compose logs -f embedding-server   # Embeddings
+- **Terminal 1 - Embedding Server (port 8001)**:
+  ```cmd
+  cd ingestion\embedding-server
+  python main.py
+  ```
+- **Terminal 2 - FastAPI Gateway (port 8000)**:
+  ```cmd
+  cd api-gateway
+  uvicorn src.main:app --reload --port 8000
+  ```
 
-# Stop all services
-docker compose down
+---
 
-# Stop and remove volumes (reset state)
-docker compose down -v
+## 🛠️ Service Endpoints
 
-# Run just migrations
-cd api-gateway && python -m alembic upgrade head && cd ..
+When running the local Docker stack, you can access the following services:
 
-# Run just seeding
-python scripts/seed_data.py
+| Service | Protocol / Port | URL |
+| :--- | :--- | :--- |
+| **FastAPI Gateway** | HTTP 8000 | [http://localhost:8000](http://localhost:8000) |
+| **API Interactive Docs** | HTTP 8000 | [http://localhost:8000/docs](http://localhost:8000/docs) |
+| **FastAPI Health Check** | HTTP 8000 | [http://localhost:8000/health](http://localhost:8000/health) |
+| **Weaviate Console/API** | HTTP 8080 | [http://localhost:8080](http://localhost:8080) |
+| **Qdrant Dashboard** | HTTP 6333 | [http://localhost:6333/dashboard](http://localhost:6333/dashboard) |
+| **HashiCorp Vault** | HTTP 8200 | [http://localhost:8200](http://localhost:8200) |
+| **Keycloak Admin** | HTTPS 8443 | [http://localhost:8443](http://localhost:8443) |
+| **Apache Kafka** | TCP 9092 | `localhost:9092` |
+| **Redis Cache** | TCP 6379 | `localhost:6379` |
+| **Embedding Server** | HTTP 8001 | [http://localhost:8001](http://localhost:8001) |
+| **Web Dashboard** | HTTP 5173 | [http://localhost:5173](http://localhost:5173) (requires `npm run dev`) |
 
-# Run just vector store setup
-python scripts/setup_weaviate_schema.py
-python scripts/setup_qdrant_schema.py
+---
 
-# Run just Kafka topics
-python scripts/create_kafka_topics.py
+## 🔑 Test Credentials
+
+All synthetic test users share the password: `test-password-123`
+
+| Email | Role | Tenant |
+| :--- | :--- | :--- |
+| `admin@tenant1.test` | Admin | Acme Health |
+| `engineer@tenant1.test` | Engineer | Acme Health |
+| `analyst@tenant1.test` | Analyst | Acme Health |
+| `auditor@tenant1.test` | Auditor | Acme Health |
+| `admin@tenant2.test` | Admin | Riverside Medical |
+| `engineer@tenant2.test` | Engineer | Riverside Medical |
+
+---
+
+## ⌨️ Windows Command Reference
+
+The tasks configured in `scripts\dev.ps1`, `scripts\dev.bat`, and `Makefile` include:
+
+| Task | PowerShell command | CMD / batch command | Make command |
+| :--- | :--- | :--- | :--- |
+| **Start Full Stack** | `powershell -ExecutionPolicy Bypass -File scripts\dev.ps1 -Task dev` | `scripts\dev.bat dev` | `make dev` |
+| **Start Lite Stack** * | `powershell -ExecutionPolicy Bypass -File scripts\dev.ps1 -Task dev-lite` | `scripts\dev.bat dev-lite` | `make dev-lite` |
+| **Stop Stack** | `powershell -ExecutionPolicy Bypass -File scripts\dev.ps1 -Task stop` | `scripts\dev.bat stop` | `make stop` |
+| **Tear Down & Clean** | `powershell -ExecutionPolicy Bypass -File scripts\dev.ps1 -Task clean` | `scripts\dev.bat clean` | `make clean` |
+| **Run Migrations** | `powershell -ExecutionPolicy Bypass -File scripts\dev.ps1 -Task migrate` | `scripts\dev.bat migrate` | `make migrate` |
+| **New Migration** | `powershell -ExecutionPolicy Bypass -File scripts\dev.ps1 -Task migration` | `scripts\dev.bat migration` | `make migration` |
+| **Seed Test Data** | `powershell -ExecutionPolicy Bypass -File scripts\dev.ps1 -Task seed` | `scripts\dev.bat seed` | `make seed` |
+| **Setup Schemas** | `powershell -ExecutionPolicy Bypass -File scripts\dev.ps1 -Task setup-vector-stores` | `scripts\dev.bat setup-vector-stores` | `make setup-vector-stores` |
+| **Create Kafka Topics**| `powershell -ExecutionPolicy Bypass -File scripts\dev.ps1 -Task kafka-topics` | `scripts\dev.bat kafka-topics` | `make kafka-topics` |
+| **Run Unit Tests** | `powershell -ExecutionPolicy Bypass -File scripts\dev.ps1 -Task test-unit` | `scripts\dev.bat test-unit` | `make test-unit` |
+| **Run Integration Tests**| `powershell -ExecutionPolicy Bypass -File scripts\dev.ps1 -Task test-integration` | `scripts\dev.bat test-integration` | `make test-integration` |
+
+*\* Lite Stack runs PostgreSQL, Redis, Weaviate, Kafka, and Vault, bypassing Keycloak, Qdrant, and local Embeddings server to conserve system RAM.*
+
+---
+
+## ⚙️ Windows-Specific Tips
+
+- **Path Separators**: Use backslashes (`\`) for local file operations in CMD and PowerShell (e.g. `scripts\dev.bat`). In code configuration blocks and python imports, standard syntax applies.
+- **Line Endings (CRLF)**: Ensure scripts inside the repository (.bat, .ps1) are checked out or saved using CRLF line endings to avoid script parser errors on Windows.
+- **Docker Resource Allocation**: For a smooth experience with the full local stack, configure Docker Desktop settings to allocate at least **4 CPU cores** and **8GB of memory**.
+- **Execution Policy Permissions**: If you get a permission error in PowerShell when invoking the scripts, run PowerShell as Administrator once and run:
+  ```powershell
+  Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+  ```
+
+---
+
+## 🔍 Troubleshooting on Windows
+
+### Port Conflict Issues
+If a container fails to start because a port is already allocated:
+1. Identify the process ID (PID) using that port (e.g., port `8000`):
+   ```cmd
+   netstat -ano | findstr :8000
+   ```
+2. Terminate the process (replace `<PID>` with the final number in the output):
+   ```cmd
+   taskkill /PID <PID> /F
+   ```
+
+### Docker Desktop Connection Failures
+If commands fail with connection issues, run:
+```cmd
+docker ps
 ```
+Ensure Docker Desktop is open and the Docker daemon is fully started. If WSL 2 errors pop up, run `wsl --update` inside PowerShell as administrator.
 
-**Windows Users**
-
-```powershell
-# PowerShell (recommended)
-powershell -ExecutionPolicy Bypass -File scripts\dev.ps1 -Task dev
-
-# Or use batch file
-scripts\dev.bat dev
-
-# Or use make (if installed)
-make -f Makefile.windows dev
-```
-
-See [WINDOWS_SETUP.md](WINDOWS_SETUP.md) for full Windows documentation.
-
-## Architecture
-
-All-OSS stack — no paid managed services:
-
-- **API Gateway**: FastAPI + Kong OSS
-- **Auth**: Keycloak 24 (OIDC PKCE)
-- **Secrets**: HashiCorp Vault OSS
-- **Messaging**: Apache Kafka via Strimzi
-- **Database**: CloudNativePG (PostgreSQL 15)
-- **Vector (primary)**: Weaviate
-- **Vector (DR)**: Qdrant
-- **Embeddings**: Self-hosted clinical-bert (emilyalsentzer/Bio_ClinicalBERT)
-- **LLMs**: Anthropic Claude + OpenAI GPT-4o + Google Gemini
-- **Observability**: Prometheus + Grafana + Jaeger + Loki
+### Vault Initialization Fails
+The Vault configuration uses a bash script (`scripts\vault_init.sh`).
+- If you have Git for Windows installed, PowerShell will automatically detect `C:\Program Files\Git\bin\bash.exe` and execute it.
+- If not installed, you can install Git for Windows or manually run the commands inside `scripts\vault_init.sh` inside a WSL window.
