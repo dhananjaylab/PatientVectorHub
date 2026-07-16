@@ -40,7 +40,7 @@ class Settings(BaseSettings):
 
     # ── Embedding ─────────────────────────────────────────────────────────────
     EMBEDDING_MODEL_URL: str = "http://localhost:8001"
-    EMBEDDING_MODEL_VERSION: str = "clinical-bert-v2.1"
+    EMBEDDING_MODEL_VERSION: str = "text-embedding-3-large"
 
     # ── Vault ─────────────────────────────────────────────────────────────────
     VAULT_ADDR: str = "http://localhost:8200"

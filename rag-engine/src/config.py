@@ -22,7 +22,7 @@ class RAGSettings(BaseSettings):
     QDRANT_API_KEY: str = ""
     EMBEDDING_MODEL_URL: str = "http://localhost:8001"
 
-    EMBEDDING_MODEL_VERSION: str = "clinical-bert-v2.1"
+    EMBEDDING_MODEL_VERSION: str = "text-embedding-3-large"
     VAULT_ADDR: str = "http://localhost:8200"
     VAULT_TOKEN: str = "dev-root-token"
     LLM_DEFAULT_PROVIDER: str = "anthropic"
