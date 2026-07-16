@@ -76,21 +76,45 @@ class TestVaultConnectivity:
 
 class TestWeaviateConnectivity:
     def test_weaviate_ready(self):
-        import httpx
-        resp = httpx.get(
-            f"http://{WEAVIATE_HOST}:8080/v1/.well-known/ready", timeout=5
-        )
-        assert resp.status_code == 200
+        import weaviate
+        from weaviate.classes.init import Auth
+        weaviate_url = os.getenv("WEAVIATE_URL")
+        weaviate_api_key = os.getenv("WEAVIATE_API_KEY")
+        if weaviate_url and weaviate_api_key:
+            client = weaviate.connect_to_weaviate_cloud(
+                cluster_url=weaviate_url,
+                auth_credentials=Auth.api_key(weaviate_api_key),
+            )
+        else:
+            client = weaviate.connect_to_local(
+                host=WEAVIATE_HOST, port=8080,
+            )
+        try:
+            assert client.is_ready() is True
+        finally:
+            client.close()
 
     def test_weaviate_tenant_collection_exists(self):
-        import httpx
-        resp = httpx.get(
-            f"http://{WEAVIATE_HOST}:8080/v1/schema", timeout=5
-        )
-        assert resp.status_code == 200
-        classes = [c["class"] for c in resp.json().get("classes", [])]
-        assert any("PatientDocument" in c for c in classes), \
-            "No PatientDocument collections found — run make setup-vector-stores"
+        import weaviate
+        from weaviate.classes.init import Auth
+        weaviate_url = os.getenv("WEAVIATE_URL")
+        weaviate_api_key = os.getenv("WEAVIATE_API_KEY")
+        if weaviate_url and weaviate_api_key:
+            client = weaviate.connect_to_weaviate_cloud(
+                cluster_url=weaviate_url,
+                auth_credentials=Auth.api_key(weaviate_api_key),
+            )
+        else:
+            client = weaviate.connect_to_local(
+                host=WEAVIATE_HOST, port=8080,
+            )
+        try:
+            existing = {c.name for c in client.collections.list_all().values()}
+            assert any("PatientDocument" in c for c in existing), \
+                "No PatientDocument collections found — run make setup-vector-stores"
+        finally:
+            client.close()
+
 
 
 class TestKafkaConnectivity:
