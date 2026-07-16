@@ -29,21 +29,28 @@ class Settings(BaseSettings):
     VECTOR_BACKEND: str = "weaviate"
     WEAVIATE_HOST: str = "localhost"
     WEAVIATE_PORT: int = 8080
+    WEAVIATE_URL: str = ""
+    WEAVIATE_API_KEY: str = ""
     QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6334
+    QDRANT_URL: str = ""
+    QDRANT_API_KEY: str = ""
+
 
     # ── Embedding ─────────────────────────────────────────────────────────────
     EMBEDDING_MODEL_URL: str = "http://localhost:8001"
-    EMBEDDING_MODEL_VERSION: str = "clinical-bert-v2.1"
+    EMBEDDING_MODEL_VERSION: str = "text-embedding-3-large"
 
     # ── Vault ─────────────────────────────────────────────────────────────────
     VAULT_ADDR: str = "http://localhost:8200"
     VAULT_TOKEN: str = "dev-root-token"
 
-    # ── AWS / Storage ─────────────────────────────────────────────────────────
-    AWS_REGION: str = "us-east-1"
-    S3_DOCUMENT_BUCKET: str = "pvh-documents-dev"
-    S3_BACKUP_BUCKET: str = "pvh-backups-dev"
+    # ── Cloudflare R2 / Storage ───────────────────────────────────────────────
+    R2_ENDPOINT_URL: str = ""
+    R2_ACCESS_KEY_ID: str = ""
+    R2_SECRET_ACCESS_KEY: str = ""
+    R2_DOCUMENT_BUCKET: str = "pvh-documents-dev"
+    R2_BACKUP_BUCKET: str = "pvh-backups-dev"
 
     # ── App ───────────────────────────────────────────────────────────────────
     LOG_LEVEL: str = "INFO"

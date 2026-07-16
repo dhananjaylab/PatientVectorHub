@@ -14,9 +14,13 @@ class VectorSettings(BaseSettings):
     WEAVIATE_HOST: str = "localhost"
     WEAVIATE_PORT: int = 8080
     WEAVIATE_GRPC_PORT: int = 50051
+    WEAVIATE_URL: str = ""
+    WEAVIATE_API_KEY: str = ""
     QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6334
-    EMBEDDING_MODEL_VERSION: str = "clinical-bert-v2.1"
+    QDRANT_URL: str = ""
+    QDRANT_API_KEY: str = ""
+    EMBEDDING_MODEL_VERSION: str = "text-embedding-3-large"
     LOG_LEVEL: str = "INFO"
     ENVIRONMENT: str = "development"
 

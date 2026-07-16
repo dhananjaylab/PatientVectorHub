@@ -42,3 +42,12 @@ def test_llm_max_tokens_positive():
 def test_api_port_valid():
     from src.config import settings
     assert 1024 <= settings.API_PORT <= 65535
+
+
+def test_vector_cloud_settings():
+    from src.config import settings
+    assert hasattr(settings, "WEAVIATE_URL")
+    assert hasattr(settings, "WEAVIATE_API_KEY")
+    assert hasattr(settings, "QDRANT_URL")
+    assert hasattr(settings, "QDRANT_API_KEY")
+
