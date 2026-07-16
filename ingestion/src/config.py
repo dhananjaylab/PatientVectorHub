@@ -45,10 +45,12 @@ class Settings(BaseSettings):
     VAULT_ADDR: str = "http://localhost:8200"
     VAULT_TOKEN: str = "dev-root-token"
 
-    # ── AWS / Storage ─────────────────────────────────────────────────────────
-    AWS_REGION: str = "us-east-1"
-    S3_DOCUMENT_BUCKET: str = "pvh-documents-dev"
-    S3_BACKUP_BUCKET: str = "pvh-backups-dev"
+    # ── Cloudflare R2 / Storage ───────────────────────────────────────────────
+    R2_ENDPOINT_URL: str = ""
+    R2_ACCESS_KEY_ID: str = ""
+    R2_SECRET_ACCESS_KEY: str = ""
+    R2_DOCUMENT_BUCKET: str = "pvh-documents-dev"
+    R2_BACKUP_BUCKET: str = "pvh-backups-dev"
 
     # ── App ───────────────────────────────────────────────────────────────────
     LOG_LEVEL: str = "INFO"

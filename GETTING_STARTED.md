@@ -211,7 +211,7 @@ pytest tests/ -v
 ### Both Setups
 - ✅ Complete environment configuration
 - ✅ LLM API key integration
-- ✅ AWS S3 document storage
+- ✅ Cloudflare R2 document storage
 - ✅ Health checks and verification
 - ✅ Comprehensive documentation
 - ✅ Windows, macOS, and Linux support

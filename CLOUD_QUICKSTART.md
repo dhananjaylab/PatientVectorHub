@@ -25,7 +25,7 @@ cp .env.example.cloud .env
 # - WEAVIATE_HOST, WEAVIATE_PORT, WEAVIATE_GRPC_PORT
 # - QDRANT_HOST, QDRANT_PORT
 # - LLM API keys (ANTHROPIC_API_KEY, etc.)
-# - AWS credentials if using S3
+# - Cloudflare R2 credentials and endpoint url if using R2
 ```
 
 ---

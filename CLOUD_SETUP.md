@@ -134,10 +134,12 @@ GEMINI_API_KEY=AIza...
 LLM_DEFAULT_PROVIDER=anthropic
 LLM_MAX_TOKENS=1000
 
-# ── AWS (for S3) ──────────────────────────────────────────────────────
-AWS_REGION=us-east-1
-S3_DOCUMENT_BUCKET=pvh-documents-dev
-S3_BACKUP_BUCKET=pvh-backups-dev
+# ── Cloudflare R2 Storage ─────────────────────────────────────────────
+R2_ENDPOINT_URL=https://<account_id>.r2.cloudflarestorage.com
+R2_ACCESS_KEY_ID=<your-r2-access-key-id>
+R2_SECRET_ACCESS_KEY=<your-r2-secret-access-key>
+R2_DOCUMENT_BUCKET=pvh-documents-dev
+R2_BACKUP_BUCKET=pvh-backups-dev
 
 # ── Observability ─────────────────────────────────────────────────────
 JAEGER_ENDPOINT=http://your-jaeger-host:4317
@@ -467,7 +469,7 @@ curl http://localhost:8000/health      # Health check
 - `QDRANT_HOST`, `QDRANT_PORT`
 - `EMBEDDING_MODEL_URL` - Point to localhost:8001
 - `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` or `GEMINI_API_KEY`
-- `AWS_REGION`, `S3_DOCUMENT_BUCKET`, `S3_BACKUP_BUCKET` (for document storage)
+- `R2_ENDPOINT_URL`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_DOCUMENT_BUCKET`, `R2_BACKUP_BUCKET` (for Cloudflare R2 storage)
 
 ---
 

@@ -66,10 +66,12 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
 
-    # ── AWS / Storage ─────────────────────────────────────────────────────────
-    AWS_REGION: str = "us-east-1"
-    S3_DOCUMENT_BUCKET: str = "pvh-documents-dev"
-    S3_BACKUP_BUCKET: str = "pvh-backups-dev"
+    # ── Cloudflare R2 / Storage ───────────────────────────────────────────────
+    R2_ENDPOINT_URL: str = ""
+    R2_ACCESS_KEY_ID: str = ""
+    R2_SECRET_ACCESS_KEY: str = ""
+    R2_DOCUMENT_BUCKET: str = "pvh-documents-dev"
+    R2_BACKUP_BUCKET: str = "pvh-backups-dev"
 
     # ── Observability ─────────────────────────────────────────────────────────
     JAEGER_ENDPOINT: str = "http://localhost:4317"
