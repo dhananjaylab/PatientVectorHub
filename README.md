@@ -103,14 +103,72 @@ Fill in the cloud endpoint details in `.env`:
 - Cloudflare R2 Credentials (`R2_ENDPOINT_URL`, access keys, and buckets)
 - LLM API keys
 
-#### 2. Install Local Dependencies & Initialize Infrastructure
+#### 2a. Install Local Dependencies (Option: Single Unified venv)
 ```cmd
+REM Create a single virtual environment
+python -m venv venv
+call venv\Scripts\activate.bat
+
 REM Install Python dependencies
+pip install --upgrade pip
 pip install -r api-gateway\requirements.txt
 pip install -r ingestion\requirements.txt
 pip install -r rag-engine\requirements.txt
 pip install -r vector-store\requirements.txt
 pip install -r requirements-dev.txt
+```
+
+#### 2b. Install Local Dependencies (Option: Separate venv per Service - Recommended for Service Isolation)
+
+This approach isolates each service's dependencies, preventing conflicts and mapping to production deployments.
+
+```cmd
+REM 1. API Gateway venv
+python -m venv venv-api-gateway
+call venv-api-gateway\Scripts\activate.bat
+pip install --upgrade pip
+pip install -r api-gateway\requirements.txt
+deactivate
+
+REM 2. Ingestion Service venv
+python -m venv venv-ingestion
+call venv-ingestion\Scripts\activate.bat
+pip install --upgrade pip
+pip install -r ingestion\requirements.txt
+deactivate
+
+REM 3. RAG Engine venv
+python -m venv venv-rag-engine
+call venv-rag-engine\Scripts\activate.bat
+pip install --upgrade pip
+pip install -r rag-engine\requirements.txt
+deactivate
+
+REM 4. Vector Store venv
+python -m venv venv-vector-store
+call venv-vector-store\Scripts\activate.bat
+pip install --upgrade pip
+pip install -r vector-store\requirements.txt
+deactivate
+```
+
+**Separate venv Pros & Cons:**
+- ✅ **Isolation**: Each service's dependencies won't conflict
+- ✅ **Production-like**: Maps to how services are deployed separately
+- ✅ **Efficient**: Only installs what each service needs
+- ❌ **Friction**: Must activate/deactivate different venvs per service
+- ❌ **Disk Space**: Redundant packages across venvs (~8-12GB total vs. ~4-5GB unified)
+
+#### 2c. Initialize Infrastructure
+
+Choose the venv activation that matches your setup:
+
+```cmd
+REM If using unified venv:
+call venv\Scripts\activate.bat
+
+REM If using separate venvs, activate the API gateway venv:
+call venv-api-gateway\Scripts\activate.bat
 
 REM Run Alembic database migrations
 cd api-gateway
@@ -131,16 +189,44 @@ python scripts\create_kafka_topics.py
 #### 3. Start Local Python Servers
 Open two separate Command Prompt or PowerShell terminals:
 
-- **Terminal 1 - Embedding Server (port 8001)**:
-  ```cmd
-  cd ingestion\embedding-server
-  python main.py
-  ```
-- **Terminal 2 - FastAPI Gateway (port 8000)**:
-  ```cmd
-  cd api-gateway
-  uvicorn src.main:app --reload --port 8000
-  ```
+**If using unified venv:**
+```cmd
+REM Terminal 1 - Embedding Server (port 8001)
+call venv\Scripts\activate.bat
+cd ingestion\embedding-server
+python main.py
+
+REM Terminal 2 - FastAPI Gateway (port 8000)
+call venv\Scripts\activate.bat
+cd api-gateway
+uvicorn src.main:app --reload --port 8000
+```
+
+**If using separate venvs:**
+```cmd
+REM Terminal 1 - Embedding Server (port 8001)
+call venv-ingestion\Scripts\activate.bat
+cd ingestion\embedding-server
+python main.py
+
+REM Terminal 2 - FastAPI Gateway (port 8000)
+call venv-api-gateway\Scripts\activate.bat
+cd api-gateway
+uvicorn src.main:app --reload --port 8000
+```
+
+**For PowerShell users:**
+```powershell
+REM Terminal 1 - Embedding Server
+.\venv-ingestion\Scripts\Activate.ps1
+cd ingestion\embedding-server
+python main.py
+
+REM Terminal 2 - FastAPI Gateway
+.\venv-api-gateway\Scripts\Activate.ps1
+cd api-gateway
+uvicorn src.main:app --reload --port 8000
+```
 
 ---
 
@@ -237,3 +323,41 @@ Ensure Docker Desktop is open and the Docker daemon is fully started. If WSL 2 e
 The Vault configuration uses a bash script (`scripts\vault_init.sh`).
 - If you have Git for Windows installed, PowerShell will automatically detect `C:\Program Files\Git\bin\bash.exe` and execute it.
 - If not installed, you can install Git for Windows or manually run the commands inside `scripts\vault_init.sh` inside a WSL window.
+
+### Virtual Environment Issues
+
+#### Wrong venv Active When Running Services
+If you get import errors (e.g., `ModuleNotFoundError: No module named 'fastapi'`), ensure the correct venv is activated:
+```cmd
+REM Check which Python executable is being used
+where python
+
+REM This should show your venv path, e.g.:
+REM a:\PatientVectorHub\venv-api-gateway\Scripts\python.exe
+```
+
+#### Stale venv After Dependencies Change
+If you added new dependencies to a `requirements.txt` file:
+```cmd
+REM Activate the corresponding venv and reinstall
+call venv-api-gateway\Scripts\activate.bat
+pip install -r api-gateway\requirements.txt --force-reinstall
+```
+
+#### Switch Between Unified and Separate venvs
+If you want to migrate from one approach to another:
+```cmd
+REM Deactivate current venv
+deactivate
+
+REM Delete old venv(s)
+rmdir /s /q venv
+rmdir /s /q venv-api-gateway venv-ingestion venv-rag-engine venv-vector-store
+
+REM Create new venv setup (see section 2a, 2b, or 2c above)
+```
+
+#### Virtual Environment Not Found in IDE
+If VSCode/PyCharm can't find your Python interpreter:
+- In **VSCode**: Press `Ctrl+Shift+P` → "Python: Select Interpreter" → Choose your venv path (e.g., `.\venv-api-gateway\Scripts\python.exe`)
+- In **PyCharm**: Go to File → Settings → Project → Python Interpreter → Add Interpreter → Existing Environment → Navigate to venv\Scripts\python.exe
