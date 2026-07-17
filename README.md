@@ -242,10 +242,13 @@ When running the local Docker stack, you can access the following services:
 | **Weaviate Console/API** | HTTP 8080 | [http://localhost:8080](http://localhost:8080) |
 | **Qdrant Dashboard** | HTTP 6333 | [http://localhost:6333/dashboard](http://localhost:6333/dashboard) |
 | **HashiCorp Vault** | HTTP 8200 | [http://localhost:8200](http://localhost:8200) |
-| **Keycloak Admin** | HTTPS 8443 | [http://localhost:8443](http://localhost:8443) |
+| **Keycloak Admin** | HTTP 8080 | [http://localhost:8080/admin](http://localhost:8080/admin) |
+| **Keycloak OIDC** | HTTP 8080 | [http://localhost:8080](http://localhost:8080) |
 | **Apache Kafka** | TCP 9092 | `localhost:9092` |
 | **Redis Cache** | TCP 6379 | `localhost:6379` |
 | **Embedding Server** | HTTP 8001 | [http://localhost:8001](http://localhost:8001) |
+| **Jaeger Query UI** | HTTP 16686 | [http://localhost:16686](http://localhost:16686) |
+| **Jaeger OTLP gRPC** | gRPC 4317 | `localhost:4317` (trace collection) |
 | **Web Dashboard** | HTTP 5173 | [http://localhost:5173](http://localhost:5173) (requires `npm run dev`) |
 
 ---
@@ -299,7 +302,135 @@ The tasks configured in `scripts\dev.ps1`, `scripts\dev.bat`, and `Makefile` inc
 
 ---
 
-## 🔍 Troubleshooting on Windows
+## 🔐 Keycloak Setup (Authentication & Authorization)
+
+Keycloak provides OpenID Connect (OIDC) authentication for the dashboard and API. All test users are pre-configured in the realm.
+
+### Step 1: Start Keycloak (Non-Docker)
+
+If you're running Keycloak locally without Docker:
+
+```cmd
+cd C:\keycloak-26.6.4\bin
+kc.bat start-dev
+```
+
+Keycloak will start on **http://localhost:8080** (development mode, HTTP only).
+
+> **Note**: Use `start-dev` for local development. The `start` command requires HTTPS certificates.
+
+### Step 2: Import the Realm Configuration
+
+1. Open **http://localhost:8080/admin** in your browser
+2. Log in with your Keycloak admin credentials
+3. Click **"Add realm"** (top left dropdown)
+4. Click **"Import"**
+5. Select and upload `infra/keycloak/realm.json`
+6. Click **"Create"**
+
+This configures:
+- ✅ Realm: `patientvectorhub`
+- ✅ Client: `pvh-spa` (SPA application with PKCE)
+- ✅ Test users with different roles (admin, engineer, analyst, auditor)
+- ✅ Redirect URIs for `http://localhost:5173` (dashboard dev server)
+- ✅ Role-based access control (RBAC) policies
+
+### Step 3: Verify JWKS Endpoint
+
+Test that Keycloak is serving the public keys for token validation:
+
+```cmd
+curl http://localhost:8080/realms/patientvectorhub/protocol/openid-connect/certs
+```
+
+You should receive a JSON response with public keys. If successful, your authentication is ready.
+
+### Step 4: Test Login Flow
+
+Once the dashboard is running (`npm run dev` on port 5173):
+
+1. Navigate to **http://localhost:5173**
+2. You'll be redirected to Keycloak login
+3. Log in with test credentials:
+   - **Username**: `admin@tenant1.test`
+   - **Password**: `test-password-123`
+4. After successful authentication, you'll be redirected back to the dashboard
+
+---
+
+## 📊 Jaeger Setup (Distributed Tracing & Observability)
+
+Jaeger collects and visualizes distributed traces from all microservices, helping you understand request flows and identify performance bottlenecks.
+
+### Step 1: Start Jaeger (Standalone)
+
+If running Jaeger locally without Docker:
+
+```cmd
+cd C:\jaeger-2.19.0-windows-amd64
+jaeger.exe
+```
+
+Jaeger will start with:
+- **Query UI**: http://localhost:16686
+- **OTLP gRPC Receiver**: localhost:4317
+- **OTLP HTTP Receiver**: localhost:4318
+
+### Step 2: Verify Jaeger is Receiving Data
+
+Test the Jaeger API to ensure it's running:
+
+```cmd
+curl http://localhost:16686/api/services
+```
+
+Expected response (initially):
+```json
+{"data":["jaeger"],"total":1,"limit":0,"offset":0,"errors":null}
+```
+
+The `jaeger` service shown is Jaeger's self-monitoring.
+
+### Step 3: Configure Your Application
+
+Your `.env` is already configured:
+
+```bash
+JAEGER_ENDPOINT=http://localhost:4317
+LOG_LEVEL=DEBUG
+ENVIRONMENT=development
+```
+
+**For multiple applications sharing Jaeger:**
+- Each application automatically identifies itself by `service.name`
+- Jaeger UI shows a service dropdown to filter traces
+- No additional Jaeger configuration is needed per application
+
+### Step 4: View Traces in Jaeger UI
+
+Once your application is running (`make dev`):
+
+1. Open **http://localhost:16686**
+2. Select your service from the **Service** dropdown (e.g., `patientvectorhub`)
+3. Click **Find Traces**
+4. Click a trace to see:
+   - Request timeline and latency
+   - Service-to-service calls
+   - Error details and stack traces
+   - Span duration and logs
+
+### Example: Tracing a Request
+
+When you log in to the dashboard:
+1. Browser sends request → Dashboard (SPA)
+2. Dashboard calls API → FastAPI Gateway (port 8000)
+3. Gateway validates token → Keycloak (port 8080)
+4. Gateway queries database → PostgreSQL
+5. Each hop is traced and visible in Jaeger
+
+---
+
+
 
 ### Port Conflict Issues
 If a container fails to start because a port is already allocated:
