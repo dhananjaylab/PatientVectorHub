@@ -7,8 +7,8 @@ PatientVectorHub is a Windows-friendly, cloud-ready RAG platform for patient doc
 | Service | Folder | Purpose | Main dependencies |
 | :--- | :--- | :--- | :--- |
 | API Gateway | `api-gateway/` | FastAPI entrypoint, health/readiness routes, CORS, auth middleware, Alembic migrations | PostgreSQL, Keycloak, Kafka, Vault |
-| Ingestion | `ingestion/` | Document ingestion plumbing, tenant lookup helpers, embedding server, parser/chunker/worker modules | PostgreSQL, Kafka, embedding model, vector stores |
-| RAG Engine | `rag-engine/` | Retrieval and LLM orchestration configuration for query flows | Redis, vector store, embedding server, LLM providers |
+| Ingestion | `ingestion/` | Document ingestion plumbing, tenant lookup helpers, OpenAI embedding flow, parser/chunker/worker modules | PostgreSQL, Kafka, embedding model, vector stores |
+| RAG Engine | `rag-engine/` | Retrieval and LLM orchestration configuration for query flows | Redis, vector store, OpenAI embeddings, LLM providers |
 | Vector Store | `vector-store/` | Vector backend abstraction for Weaviate/Qdrant and retrieval storage contracts | Weaviate, Qdrant |
 
 Supporting components:
@@ -38,7 +38,8 @@ WEAVIATE_URL=https://YOUR-WEAVIATE-ENDPOINT
 WEAVIATE_API_KEY=YOUR_KEY
 QDRANT_URL=https://YOUR-QDRANT-ENDPOINT
 QDRANT_API_KEY=YOUR_KEY
-EMBEDDING_MODEL_URL=http://localhost:8001
+EMBEDDING_PROVIDER=openai
+EMBEDDING_MODEL_VERSION=text-embedding-3-large
 ```
 
 `DATABASE_URL` is used by async application code and Alembic. `DATABASE_URL_SYNC` is used by synchronous scripts such as `scripts\seed_data.py`.
@@ -65,7 +66,6 @@ python -m venv venv-ingestion
 .\venv-ingestion\Scripts\activate
 pip install --upgrade pip
 pip install -r ingestion\requirements.txt
-pip install -r ingestion\embedding-server\requirements.txt
 deactivate
 
 python -m venv venv-rag-engine
@@ -104,7 +104,7 @@ http://localhost:8000/docs
 
 ### Ingestion
 
-Use this service area for preparing ingestion data, running the embedding server, and preparing ingestion infrastructure.
+Use this service area for preparing ingestion data and ingestion infrastructure. The current embedding implementation uses OpenAI; the local open-source embedding server is kept as a future optional path.
 
 Database seed data:
 
@@ -113,12 +113,12 @@ Database seed data:
 python -u scripts\seed_data.py
 ```
 
-Embedding server:
+OpenAI embedding configuration:
 
-```powershell
-.\venv-ingestion\Scripts\activate
-cd ingestion\embedding-server
-python main.py
+```env
+EMBEDDING_PROVIDER=openai
+EMBEDDING_MODEL_VERSION=text-embedding-3-large
+OPENAI_API_KEY=YOUR_KEY
 ```
 
 Vector schemas used by ingestion:
@@ -157,11 +157,11 @@ Qdrant:   patient_docs_00000000_0000_0000_0000_000000000002
 
 ### RAG Engine
 
-Use this service for retrieval and answer-generation configuration. It reads Redis, vector store, embedding server, and LLM provider settings from root `.env`.
+Use this service for retrieval and answer-generation configuration. It reads Redis, vector store, OpenAI embedding settings, and LLM provider settings from root `.env`.
 
 ```powershell
 .\venv-rag-engine\Scripts\activate
-python -c "from src.config import settings; print(settings.VECTOR_BACKEND, settings.EMBEDDING_MODEL_URL, settings.LLM_DEFAULT_PROVIDER)"
+python -c "from src.config import settings; print(settings.VECTOR_BACKEND, settings.EMBEDDING_MODEL_VERSION, settings.LLM_DEFAULT_PROVIDER)"
 ```
 
 The current repository contains configuration and dependency scaffolding for the RAG engine; runnable API/worker entrypoints can be added as retrieval features are implemented.

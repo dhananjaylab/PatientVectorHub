@@ -21,10 +21,12 @@ PyMuPDF==1.28.0
 hl7==0.4.5
 boto3==1.35.80
 
+# -- Embeddings ---------------------------------------------------------------
+openai==1.52.0
+
 # ── Utilities ─────────────────────────────────────────────────────────────────
 # NOTE: LangChain removed - not currently used (will add when RAG logic is implemented)
-# NOTE: torch and transformers are ONLY needed by embedding-server
-# Phase 1 stub can run without them; future phases will use managed services
+# NOTE: current embeddings use OpenAI. torch and transformers are only needed for the future local embedding-server path.
 numpy==2.1.3
 httpx==0.28.1
 

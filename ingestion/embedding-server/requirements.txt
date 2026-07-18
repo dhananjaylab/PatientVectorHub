@@ -1,16 +1,14 @@
-# ── Phase 1 Stub: Embedding Model Server ──────────────────────────────────────
-# This service is loaded only if embedding-server is running.
-# When migrating to managed embeddings (OpenAI, etc.), this service can be decommissioned.
-# See: .env.example EMBEDDING_MODEL_URL and roadmap Phase 5
+# -- Future Optional Local Embedding Model Server ----------------------------
+# Current implementation uses OpenAI embeddings. Install this file only when working on the future local/open-source embedding server.
 
 # ── Web framework ─────────────────────────────────────────────────────────────
-fastapi==0.139.0
-uvicorn[standard]==0.33.0
+fastapi
+uvicorn[standard]
 
 # ── Settings & Validation ─────────────────────────────────────────────────────
-pydantic==2.10.4
+pydantic
 
 # ── ML / NLP (required for Clinical-BERT embedding inference) ─────────────────
-transformers==4.46.3
-torch==2.7.0
-numpy==2.1.3
+# transformers==4.46.3
+# torch==2.7.0
+numpy

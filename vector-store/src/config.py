@@ -22,6 +22,7 @@ class VectorSettings(BaseSettings):
     QDRANT_PORT: int = 6334
     QDRANT_URL: str = ""
     QDRANT_API_KEY: str = ""
+    EMBEDDING_PROVIDER: str = "openai"
     EMBEDDING_MODEL_VERSION: str = "text-embedding-3-large"
     LOG_LEVEL: str = "INFO"
     ENVIRONMENT: str = "development"

@@ -22,6 +22,7 @@ class RAGSettings(BaseSettings):
     QDRANT_PORT: int = 6334
     QDRANT_URL: str = ""
     QDRANT_API_KEY: str = ""
+    EMBEDDING_PROVIDER: str = "openai"
     EMBEDDING_MODEL_URL: str = "http://localhost:8001"
 
     EMBEDDING_MODEL_VERSION: str = "text-embedding-3-large"

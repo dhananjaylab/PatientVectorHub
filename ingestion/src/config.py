@@ -40,6 +40,7 @@ class Settings(BaseSettings):
 
 
     # ── Embedding ─────────────────────────────────────────────────────────────
+    EMBEDDING_PROVIDER: str = "openai"
     EMBEDDING_MODEL_URL: str = "http://localhost:8001"
     EMBEDDING_MODEL_VERSION: str = "text-embedding-3-large"
 
