@@ -150,8 +150,7 @@ python scripts\setup_qdrant_schema.py
 Created collections:
 
 ```text
-Weaviate: PatientDocument_00000000_0000_0000_0000_000000000001
-Weaviate: PatientDocument_00000000_0000_0000_0000_000000000002
+Weaviate: PatientDocument   (native multi-tenancy — one shard per tenant)
 Qdrant:   patient_docs_00000000_0000_0000_0000_000000000001
 Qdrant:   patient_docs_00000000_0000_0000_0000_000000000002
 ```
@@ -299,6 +298,18 @@ SELECT COUNT(*) FROM patients;
 ### Vector Store Cloud Authentication
 
 For Weaviate Cloud, set both `WEAVIATE_URL` and `WEAVIATE_API_KEY`. For Qdrant Cloud, set both `QDRANT_URL` and `QDRANT_API_KEY`. If these are empty, setup scripts fall back to host/port values.
+
+The `PatientDocument` Weaviate collection uses **native multi-tenancy** — one shard per tenant, enforced by the Weaviate engine. In Phase 6 application code, scope all operations to the correct tenant:
+
+```python
+collection = client.collections.get("PatientDocument")
+tenant_col = collection.with_tenant(tenant_id)   # shard-scoped — cross-tenant reads are impossible
+
+tenant_col.data.insert({"chunk_text": "...", "document_id": "..."}, vector=[...])
+tenant_col.query.near_vector(near_vector=[...], limit=10)
+```
+
+New tenants are created automatically on first use (`auto_tenant_creation=True`); no pre-registration is required.
 
 ### Windows Console Encoding
 
