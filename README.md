@@ -34,6 +34,7 @@ Important cloud settings:
 DATABASE_URL=postgresql+asyncpg://USER:PASSWORD@HOST:PORT/DB?sslmode=require
 DATABASE_URL_SYNC=postgresql+psycopg2://USER:PASSWORD@HOST:PORT/DB?sslmode=require
 KAFKA_BROKERS=HOST:PORT
+KAFKA_SECURITY_PROTOCOL=PLAINTEXT
 WEAVIATE_URL=https://YOUR-WEAVIATE-ENDPOINT
 WEAVIATE_API_KEY=YOUR_KEY
 QDRANT_URL=https://YOUR-QDRANT-ENDPOINT
@@ -53,7 +54,7 @@ EMBEDDING_MODEL_VERSION=text-embedding-3-large
 
 ## Install Dependencies
 
-The repo supports separate virtual environments per service, which is the recommended setup for this project.
+The repo supports separate virtual environments per service, which is the recommended setup for this project. The local embedding server has its own optional requirements file for future open-source embedding work; it is not needed for the current OpenAI embedding path.
 
 ```powershell
 python -m venv venv-api-gateway
@@ -293,7 +294,7 @@ SELECT COUNT(*) FROM patients;
 
 ### Kafka Cloud Authentication
 
-`KAFKA_BROKERS` is loaded from `.env`. If your Kafka provider requires SASL/SSL credentials or certificates, extend `scripts\create_kafka_topics.py` with those provider-specific settings before running it.
+`KAFKA_BROKERS` and optional `KAFKA_SECURITY_PROTOCOL`, `KAFKA_USERNAME`, `KAFKA_PASSWORD`, `KAFKA_SASL_MECHANISM`, `KAFKA_SSL_CAFILE`, `KAFKA_SSL_CERTFILE`, and `KAFKA_SSL_KEYFILE` are loaded from `.env`. Aiven Kafka usually requires SSL/SASL or service certificates; copy those values from the Aiven console before running `scripts\create_kafka_topics.py`.
 
 ### Vector Store Cloud Authentication
 
