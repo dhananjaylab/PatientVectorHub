@@ -2,6 +2,8 @@
 weaviate-client
 qdrant-client
 
+python-dotenv
+
 # ── HTTP client ────────────────────────────────────────────────────────────────
 # httpx
 
