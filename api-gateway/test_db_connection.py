@@ -10,7 +10,7 @@ import asyncpg
 
 async def test_connection():
     """Test connection to the database."""
-    db_url = "postgresql+asyncpg://avnadmin:AVNS_mz7vD3TiuVuxQy94bzN@pg-882f68b-lokhandejay90-b634.i.aivencloud.com:26977/defaultdb?sslmode=require"
+    db_url = os.getenv("DATABASE_URL")
 
     if not db_url:
         print("❌ DATABASE_URL environment variable not set")
