@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 """
 Create Weaviate PatientDocument collections for all tenants.
-Safe to run multiple times — skips existing collections.
+Safe to run multiple times - skips existing collections.
 """
 import os
+from pathlib import Path
 import sys
 import time
+
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 
 WEAVIATE_HOST = os.getenv("WEAVIATE_HOST", "localhost")
@@ -29,7 +34,7 @@ def create_schema() -> None:
             Configure, Property, DataType, VectorDistances,
         )
     except ImportError:
-        print("  weaviate-client not installed — skipping schema setup")
+        print("  weaviate-client not installed - skipping schema setup")
         return
 
     weaviate_url = os.getenv("WEAVIATE_URL")
@@ -54,7 +59,7 @@ def create_schema() -> None:
         except Exception as e:
             if attempt == 11:
                 target_str = weaviate_url if (weaviate_url and weaviate_api_key) else f"{WEAVIATE_HOST}:{WEAVIATE_PORT}"
-                print(f"  ✗ Weaviate not ready at {target_str}: {e}")
+                print(f"  ERROR Weaviate not ready at {target_str}: {e}")
                 return
             print(f"  Waiting for Weaviate... ({attempt + 1}/12)")
             time.sleep(5)
@@ -65,7 +70,7 @@ def create_schema() -> None:
     for tid in TENANT_IDS:
         name = collection_name(tid)
         if name in existing:
-            print(f"  ✓ Exists  : {name}")
+            print(f"  OK Exists  : {name}")
             continue
 
         client.collections.create(
@@ -90,7 +95,7 @@ def create_schema() -> None:
                 Property(name="chunk_index",     data_type=DataType.INT),
             ],
         )
-        print(f"  ✓ Created : {name}")
+        print(f"  OK Created : {name}")
 
     client.close()
 
