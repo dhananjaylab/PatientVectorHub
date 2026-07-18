@@ -221,4 +221,3 @@ __marimo__/
 # Test/debug scripts with potential secrets
 test_db_connection.py
 *_test_connection.py
-test_*.py
