@@ -61,7 +61,7 @@ def create_app() -> FastAPI:
         title="PatientVectorHub API",
         description=(
             "HIPAA-compliant enterprise RAG platform for 1.5B patient documents. "
-            "Multi-tenant, OpenID Connect secured, clinical-bert powered."
+            "Multi-tenant, OpenID Connect secured, OpenAI-embedding powered."
         ),
         version="1.0.0",
         docs_url="/docs",
@@ -100,16 +100,18 @@ def create_app() -> FastAPI:
     )
     app.middleware("http")(request_id_middleware)
 
-    # Phase 3: Keycloak JWT + Audit middleware activated
-    from .middleware.auth import KeycloakJWTMiddleware
-    app.add_middleware(
-        KeycloakJWTMiddleware,
-        jwks_url=settings.KEYCLOAK_JWKS_URL,
-        public_paths=frozenset({
-            "/health", "/ready", "/docs", "/redoc",
-            "/openapi.json", "/metrics",
-        }),
-    )
+    # Keycloak middleware is enabled once api-gateway/src/middleware/auth.py exists.
+    if settings.AUTH_ENABLED:
+        from .middleware.auth import KeycloakJWTMiddleware
+
+        app.add_middleware(
+            KeycloakJWTMiddleware,
+            jwks_url=settings.KEYCLOAK_JWKS_URL,
+            public_paths=frozenset({
+                "/health", "/ready", "/docs", "/redoc",
+                "/openapi.json", "/metrics",
+            }),
+        )
 
     # Phase 10 (Security): AuditLogMiddleware uncomment when ready
     # from .middleware.audit_log import AuditLogMiddleware

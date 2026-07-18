@@ -50,7 +50,10 @@ class Settings(BaseSettings):
     VAULT_TOKEN: str = "dev-root-token"
     # Production: VAULT_TOKEN unused — K8s ServiceAccount auth via Vault agent
 
-    # ── Keycloak ──────────────────────────────────────────────────────────────
+    # -- Auth ---------------------------------------------------------------------
+    AUTH_ENABLED: bool = False
+
+    # -- Keycloak -----------------------------------------------------------------
     KEYCLOAK_BASE_URL: str = "http://localhost:8443"
     KEYCLOAK_REALM: str = "patientvectorhub"
     KEYCLOAK_JWKS_URL: str = (
