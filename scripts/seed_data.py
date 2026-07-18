@@ -3,6 +3,25 @@
 Seed synthetic test data - NO real PHI.
 Creates: 2 tenants, 4 users per tenant (one per role), 1000 patients per tenant.
 Safe to run multiple times (ON CONFLICT DO NOTHING).
+
+RLS note (migration 003_enable_rls.py)
+---------------------------------------
+`users` and `patients` now run under FORCE ROW LEVEL SECURITY with a
+policy requiring tenant_id = current_setting('app.tenant_id')::uuid on
+every INSERT (via WITH CHECK) and SELECT/UPDATE/DELETE (via USING).
+
+This script therefore calls _set_tenant_context() before every batch of
+inserts into those two tables, scoping the connection's session GUC to
+the tenant being seeded.
+
+Locally, against the docker-compose Postgres, this was invisible before
+this patch: POSTGRES_USER=pvh is bootstrapped as a Postgres superuser by
+the official postgres image's initdb step, and superusers always bypass
+RLS regardless of FORCE. Without _set_tenant_context(), this exact same
+script fails on Aiven (and any other managed Postgres where the app role
+is not a superuser) with:
+    psycopg2.errors.InsufficientPrivilege: new row violates row-level
+    security policy for table "users" / "patients"
 """
 import os
 import sys
@@ -12,6 +31,14 @@ import uuid
 import hashlib
 
 from dotenv import load_dotenv
+
+try:
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.engine import Connection
+except ImportError:
+    create_engine = None
+    text = None
+    Connection = None
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
@@ -52,10 +79,45 @@ def fake_mrn(seed: str) -> str:
     return f"vault:v1:SEED_{h}"
 
 
+def _set_tenant_context(conn: "Connection", tenant_id: str) -> None:
+    """Scope subsequent statements on this connection to tenant_id, to
+    satisfy the RLS policies from migration 003_enable_rls.py.
+
+    Uses set_config(..., is_local=True) rather than a literal
+    `SET LOCAL app.tenant_id = '...'` because SET/SET LOCAL do not
+    accept bound parameters over the wire protocol -- set_config() is
+    the parameterizable equivalent. is_local=True scopes the value to
+    the current transaction, so it automatically resets on
+    conn.commit() rather than leaking into whatever the pooled
+    connection is used for next.
+
+    Required on every environment where the connecting role is not a
+    Postgres superuser (e.g. Aiven-managed Postgres, which does not
+    grant SUPERUSER to application roles). Local Docker Compose
+    Postgres happens to work without this too, because POSTGRES_USER
+    is bootstrapped as a superuser there -- but don't rely on that.
+    """
+    conn.execute(
+        text("SELECT set_config('app.tenant_id', :tid, true)"),
+        {"tid": tenant_id},
+    )
+
+
+def _reset_seed_data(conn: "Connection") -> None:
+    """Remove previously seeded tenant rows so reruns stay deterministic."""
+    for tid in [TENANT_A, TENANT_B]:
+        _set_tenant_context(conn, tid)
+        conn.execute(text("DELETE FROM patients WHERE tenant_id = :tid"), {"tid": tid})
+        conn.execute(text("DELETE FROM users WHERE tenant_id = :tid"), {"tid": tid})
+
+    conn.execute(
+        text("DELETE FROM tenants WHERE id IN (:tenant_a, :tenant_b)"),
+        {"tenant_a": TENANT_A, "tenant_b": TENANT_B},
+    )
+
+
 def seed() -> None:
-    try:
-        from sqlalchemy import create_engine, text
-    except ImportError:
+    if create_engine is None:
         print("SQLAlchemy not installed - cannot seed")
         sys.exit(1)
 
@@ -64,7 +126,9 @@ def seed() -> None:
     print("Connecting to configured PostgreSQL database...")
     with engine.connect() as conn:
         print("Connected. Seeding rows...")
-        # Tenants
+        _reset_seed_data(conn)
+
+        # Tenants -- not RLS-scoped (root table, no tenant_id column).
         for t in TENANTS:
             conn.execute(text(
                 "INSERT INTO tenants (id, name, namespace, plan, created_at)"
@@ -73,10 +137,11 @@ def seed() -> None:
             ), {"id": t["id"], "name": t["name"], "ns": t["namespace"]})
         print(f"  OK {len(TENANTS)} tenants seeded")
 
-        # Users (one per role per tenant)
+        # Users (one per role per tenant) -- RLS-scoped, set context per tenant.
         user_count = 0
         for i, tid in enumerate([TENANT_A, TENANT_B]):
             tenant_label = f"tenant{i + 1}"
+            _set_tenant_context(conn, tid)
             for role in ROLES:
                 uid = str(uuid.uuid5(
                     uuid.NAMESPACE_DNS, f"{role}@{tenant_label}.test"
@@ -96,9 +161,10 @@ def seed() -> None:
                 user_count += 1
         print(f"  OK {user_count} users seeded ({len(ROLES)} roles x {len(TENANTS)} tenants)")
 
-        # Patients (1000 per tenant)
+        # Patients (1000 per tenant) -- RLS-scoped, set context per tenant.
         patient_count = 0
         for tid in [TENANT_A, TENANT_B]:
+            _set_tenant_context(conn, tid)
             batch = []
             for j in range(1000):
                 pid = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"patient-{tid}-{j}"))
@@ -126,6 +192,8 @@ def seed() -> None:
     for t in ["tenant1", "tenant2"]:
         for role in ROLES:
             print(f"    {role}@{t}.test  (Keycloak password: test-password-123)")
+    print("")
+    print("  Verify counts (RLS-aware): python scripts/verify_seed.py")
 
 
 if __name__ == "__main__":
