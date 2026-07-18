@@ -18,11 +18,16 @@ KAFKA_SSL_CAFILE = os.getenv("KAFKA_SSL_CAFILE", "")
 KAFKA_SSL_CERTFILE = os.getenv("KAFKA_SSL_CERTFILE", "")
 KAFKA_SSL_KEYFILE = os.getenv("KAFKA_SSL_KEYFILE", "")
 
+DEFAULT_PARTITIONS = int(os.getenv("KAFKA_TOPIC_PARTITIONS", "2"))
+DLQ_PARTITIONS = int(os.getenv("KAFKA_DLQ_PARTITIONS", str(DEFAULT_PARTITIONS)))
+TOPIC_RETENTION_MS = os.getenv("KAFKA_TOPIC_RETENTION_MS")
+DLQ_RETENTION_MS = os.getenv("KAFKA_DLQ_RETENTION_MS")
+
 TOPICS = [
-    {"name": "doc-ingest", "partitions": 12, "retention_ms": 86_400_000},
-    {"name": "doc-chunk", "partitions": 24, "retention_ms": 43_200_000},
-    {"name": "doc-embed", "partitions": 24, "retention_ms": 43_200_000},
-    {"name": "doc-dlq", "partitions": 6, "retention_ms": 604_800_000},
+    {"name": "doc-ingest", "partitions": DEFAULT_PARTITIONS, "retention_ms": TOPIC_RETENTION_MS},
+    {"name": "doc-chunk", "partitions": DEFAULT_PARTITIONS, "retention_ms": TOPIC_RETENTION_MS},
+    {"name": "doc-embed", "partitions": DEFAULT_PARTITIONS, "retention_ms": TOPIC_RETENTION_MS},
+    {"name": "doc-dlq", "partitions": DLQ_PARTITIONS, "retention_ms": DLQ_RETENTION_MS},
 ]
 
 
@@ -51,6 +56,15 @@ def kafka_admin_config() -> dict:
     if KAFKA_SSL_KEYFILE:
         config["ssl_keyfile"] = KAFKA_SSL_KEYFILE
 
+    return config
+
+
+
+def topic_config(topic: dict) -> dict:
+    """Return topic configs allowed by the current provider plan."""
+    config = {"min.insync.replicas": "1"}
+    if topic.get("retention_ms"):
+        config["retention.ms"] = str(topic["retention_ms"])
     return config
 
 
@@ -83,11 +97,7 @@ def create_topics() -> None:
             name=t["name"],
             num_partitions=t["partitions"],
             replication_factor=1,
-            topic_configs={
-                "retention.ms": str(t["retention_ms"]),
-                "min.insync.replicas": "1",
-                "segment.bytes": "134217728",
-            },
+            topic_configs=topic_config(t),
         )
         for t in TOPICS
     ]
