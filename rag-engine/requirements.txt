@@ -1,26 +1,26 @@
 # ── LLM SDKs ──────────────────────────────────────────────────────────────────
-openai==1.52.0
-anthropic==0.116.0
-google-genai==0.5.0  # Migrated from deprecated google-generativeai
+openai
+anthropic
+google-genai  # Migrated from deprecated google-generativeai
 
 # ── Search & Ranking ──────────────────────────────────────────────────────────
-rank-bm25==0.2.2
+rank-bm25
 
 # ── Cache & Message Queue ─────────────────────────────────────────────────────
-redis==5.2.1
+redis
 
 # ── HTTP client ────────────────────────────────────────────────────────────────
-httpx==0.28.1
+httpx
 
 # ── Retry logic ────────────────────────────────────────────────────────────────
-tenacity==9.0.0
+tenacity
 
 # ── Settings & Validation ─────────────────────────────────────────────────────
-pydantic==2.10.4
-pydantic-settings==2.6.1
+pydantic
+pydantic-settings
 
 # ── Monitoring & Metrics ──────────────────────────────────────────────────────
-prometheus-client==0.21.1
+prometheus-client
 
 # NOTE: LangChain removed - not currently used
 # Will add langchain when RAG retrieval chains are implemented (Phase 5 roadmap)

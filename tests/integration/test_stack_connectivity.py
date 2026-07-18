@@ -110,8 +110,8 @@ class TestWeaviateConnectivity:
             )
         try:
             existing = {c.name for c in client.collections.list_all().values()}
-            assert any("PatientDocument" in c for c in existing), \
-                "No PatientDocument collections found — run make setup-vector-stores"
+            assert "PatientDocument" in existing, \
+                "PatientDocument collection not found — run: python scripts/setup_weaviate_schema.py"
         finally:
             client.close()
 

@@ -3,12 +3,14 @@ PatientVectorHub — API Gateway configuration.
 Uses Pydantic BaseSettings for type-safe environment variable loading.
 All values can be overridden via environment variables or .env file.
 """
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=Path(__file__).resolve().parents[2] / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=True,
@@ -39,6 +41,7 @@ class Settings(BaseSettings):
 
 
     # ── Embedding ─────────────────────────────────────────────────────────────
+    EMBEDDING_PROVIDER: str = "openai"
     EMBEDDING_MODEL_URL: str = "http://localhost:8001"
     EMBEDDING_MODEL_VERSION: str = "text-embedding-3-large"
 
@@ -47,7 +50,10 @@ class Settings(BaseSettings):
     VAULT_TOKEN: str = "dev-root-token"
     # Production: VAULT_TOKEN unused — K8s ServiceAccount auth via Vault agent
 
-    # ── Keycloak ──────────────────────────────────────────────────────────────
+    # -- Auth ---------------------------------------------------------------------
+    AUTH_ENABLED: bool = False
+
+    # -- Keycloak -----------------------------------------------------------------
     KEYCLOAK_BASE_URL: str = "http://localhost:8443"
     KEYCLOAK_REALM: str = "patientvectorhub"
     KEYCLOAK_JWKS_URL: str = (

@@ -1,10 +1,12 @@
 """PatientVectorHub — Vector Store service configuration."""
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class VectorSettings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=Path(__file__).resolve().parents[2] / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=True,
@@ -20,6 +22,7 @@ class VectorSettings(BaseSettings):
     QDRANT_PORT: int = 6334
     QDRANT_URL: str = ""
     QDRANT_API_KEY: str = ""
+    EMBEDDING_PROVIDER: str = "openai"
     EMBEDDING_MODEL_VERSION: str = "text-embedding-3-large"
     LOG_LEVEL: str = "INFO"
     ENVIRONMENT: str = "development"
