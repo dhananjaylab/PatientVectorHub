@@ -6,6 +6,7 @@ python-multipart
 # ── Settings ──────────────────────────────────────────────────────────────────
 pydantic
 pydantic-settings
+python-dotenv
 
 # ── Database ──────────────────────────────────────────────────────────────────
 sqlalchemy[asyncio]
