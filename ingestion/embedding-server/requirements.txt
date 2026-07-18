@@ -1,6 +1,16 @@
-fastapi==0.111.0
-uvicorn[standard]==0.30.1
-transformers==4.41.2
-torch==2.3.0
-numpy==1.26.4
-pydantic==2.7.4
+# ── Phase 1 Stub: Embedding Model Server ──────────────────────────────────────
+# This service is loaded only if embedding-server is running.
+# When migrating to managed embeddings (OpenAI, etc.), this service can be decommissioned.
+# See: .env.example EMBEDDING_MODEL_URL and roadmap Phase 5
+
+# ── Web framework ─────────────────────────────────────────────────────────────
+fastapi==0.139.0
+uvicorn[standard]==0.33.0
+
+# ── Settings & Validation ─────────────────────────────────────────────────────
+pydantic==2.10.4
+
+# ── ML / NLP (required for Clinical-BERT embedding inference) ─────────────────
+transformers==4.46.3
+torch==2.7.0
+numpy==2.1.3

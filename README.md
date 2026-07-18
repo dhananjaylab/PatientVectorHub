@@ -103,14 +103,72 @@ Fill in the cloud endpoint details in `.env`:
 - Cloudflare R2 Credentials (`R2_ENDPOINT_URL`, access keys, and buckets)
 - LLM API keys
 
-#### 2. Install Local Dependencies & Initialize Infrastructure
+#### 2a. Install Local Dependencies (Option: Single Unified venv)
 ```cmd
+REM Create a single virtual environment
+python -m venv venv
+call venv\Scripts\activate.bat
+
 REM Install Python dependencies
+pip install --upgrade pip
 pip install -r api-gateway\requirements.txt
 pip install -r ingestion\requirements.txt
 pip install -r rag-engine\requirements.txt
 pip install -r vector-store\requirements.txt
 pip install -r requirements-dev.txt
+```
+
+#### 2b. Install Local Dependencies (Option: Separate venv per Service - Recommended for Service Isolation)
+
+This approach isolates each service's dependencies, preventing conflicts and mapping to production deployments.
+
+```cmd
+REM 1. API Gateway venv
+python -m venv venv-api-gateway
+call venv-api-gateway\Scripts\activate.bat
+pip install --upgrade pip
+pip install -r api-gateway\requirements.txt
+deactivate
+
+REM 2. Ingestion Service venv
+python -m venv venv-ingestion
+call venv-ingestion\Scripts\activate.bat
+pip install --upgrade pip
+pip install -r ingestion\requirements.txt
+deactivate
+
+REM 3. RAG Engine venv
+python -m venv venv-rag-engine
+call venv-rag-engine\Scripts\activate.bat
+pip install --upgrade pip
+pip install -r rag-engine\requirements.txt
+deactivate
+
+REM 4. Vector Store venv
+python -m venv venv-vector-store
+call venv-vector-store\Scripts\activate.bat
+pip install --upgrade pip
+pip install -r vector-store\requirements.txt
+deactivate
+```
+
+**Separate venv Pros & Cons:**
+- ✅ **Isolation**: Each service's dependencies won't conflict
+- ✅ **Production-like**: Maps to how services are deployed separately
+- ✅ **Efficient**: Only installs what each service needs
+- ❌ **Friction**: Must activate/deactivate different venvs per service
+- ❌ **Disk Space**: Redundant packages across venvs (~8-12GB total vs. ~4-5GB unified)
+
+#### 2c. Initialize Infrastructure
+
+Choose the venv activation that matches your setup:
+
+```cmd
+REM If using unified venv:
+call venv\Scripts\activate.bat
+
+REM If using separate venvs, activate the API gateway venv:
+call venv-api-gateway\Scripts\activate.bat
 
 REM Run Alembic database migrations
 cd api-gateway
@@ -131,16 +189,44 @@ python scripts\create_kafka_topics.py
 #### 3. Start Local Python Servers
 Open two separate Command Prompt or PowerShell terminals:
 
-- **Terminal 1 - Embedding Server (port 8001)**:
-  ```cmd
-  cd ingestion\embedding-server
-  python main.py
-  ```
-- **Terminal 2 - FastAPI Gateway (port 8000)**:
-  ```cmd
-  cd api-gateway
-  uvicorn src.main:app --reload --port 8000
-  ```
+**If using unified venv:**
+```cmd
+REM Terminal 1 - Embedding Server (port 8001)
+call venv\Scripts\activate.bat
+cd ingestion\embedding-server
+python main.py
+
+REM Terminal 2 - FastAPI Gateway (port 8000)
+call venv\Scripts\activate.bat
+cd api-gateway
+uvicorn src.main:app --reload --port 8000
+```
+
+**If using separate venvs:**
+```cmd
+REM Terminal 1 - Embedding Server (port 8001)
+call venv-ingestion\Scripts\activate.bat
+cd ingestion\embedding-server
+python main.py
+
+REM Terminal 2 - FastAPI Gateway (port 8000)
+call venv-api-gateway\Scripts\activate.bat
+cd api-gateway
+uvicorn src.main:app --reload --port 8000
+```
+
+**For PowerShell users:**
+```powershell
+REM Terminal 1 - Embedding Server
+.\venv-ingestion\Scripts\Activate.ps1
+cd ingestion\embedding-server
+python main.py
+
+REM Terminal 2 - FastAPI Gateway
+.\venv-api-gateway\Scripts\Activate.ps1
+cd api-gateway
+uvicorn src.main:app --reload --port 8000
+```
 
 ---
 
@@ -156,10 +242,13 @@ When running the local Docker stack, you can access the following services:
 | **Weaviate Console/API** | HTTP 8080 | [http://localhost:8080](http://localhost:8080) |
 | **Qdrant Dashboard** | HTTP 6333 | [http://localhost:6333/dashboard](http://localhost:6333/dashboard) |
 | **HashiCorp Vault** | HTTP 8200 | [http://localhost:8200](http://localhost:8200) |
-| **Keycloak Admin** | HTTPS 8443 | [http://localhost:8443](http://localhost:8443) |
+| **Keycloak Admin** | HTTP 8080 | [http://localhost:8080/admin](http://localhost:8080/admin) |
+| **Keycloak OIDC** | HTTP 8080 | [http://localhost:8080](http://localhost:8080) |
 | **Apache Kafka** | TCP 9092 | `localhost:9092` |
 | **Redis Cache** | TCP 6379 | `localhost:6379` |
 | **Embedding Server** | HTTP 8001 | [http://localhost:8001](http://localhost:8001) |
+| **Jaeger Query UI** | HTTP 16686 | [http://localhost:16686](http://localhost:16686) |
+| **Jaeger OTLP gRPC** | gRPC 4317 | `localhost:4317` (trace collection) |
 | **Web Dashboard** | HTTP 5173 | [http://localhost:5173](http://localhost:5173) (requires `npm run dev`) |
 
 ---
@@ -213,7 +302,135 @@ The tasks configured in `scripts\dev.ps1`, `scripts\dev.bat`, and `Makefile` inc
 
 ---
 
-## 🔍 Troubleshooting on Windows
+## 🔐 Keycloak Setup (Authentication & Authorization)
+
+Keycloak provides OpenID Connect (OIDC) authentication for the dashboard and API. All test users are pre-configured in the realm.
+
+### Step 1: Start Keycloak (Non-Docker)
+
+If you're running Keycloak locally without Docker:
+
+```cmd
+cd C:\keycloak-26.6.4\bin
+kc.bat start-dev
+```
+
+Keycloak will start on **http://localhost:8080** (development mode, HTTP only).
+
+> **Note**: Use `start-dev` for local development. The `start` command requires HTTPS certificates.
+
+### Step 2: Import the Realm Configuration
+
+1. Open **http://localhost:8080/admin** in your browser
+2. Log in with your Keycloak admin credentials
+3. Click **"Add realm"** (top left dropdown)
+4. Click **"Import"**
+5. Select and upload `infra/keycloak/realm.json`
+6. Click **"Create"**
+
+This configures:
+- ✅ Realm: `patientvectorhub`
+- ✅ Client: `pvh-spa` (SPA application with PKCE)
+- ✅ Test users with different roles (admin, engineer, analyst, auditor)
+- ✅ Redirect URIs for `http://localhost:5173` (dashboard dev server)
+- ✅ Role-based access control (RBAC) policies
+
+### Step 3: Verify JWKS Endpoint
+
+Test that Keycloak is serving the public keys for token validation:
+
+```cmd
+curl http://localhost:8080/realms/patientvectorhub/protocol/openid-connect/certs
+```
+
+You should receive a JSON response with public keys. If successful, your authentication is ready.
+
+### Step 4: Test Login Flow
+
+Once the dashboard is running (`npm run dev` on port 5173):
+
+1. Navigate to **http://localhost:5173**
+2. You'll be redirected to Keycloak login
+3. Log in with test credentials:
+   - **Username**: `admin@tenant1.test`
+   - **Password**: `test-password-123`
+4. After successful authentication, you'll be redirected back to the dashboard
+
+---
+
+## 📊 Jaeger Setup (Distributed Tracing & Observability)
+
+Jaeger collects and visualizes distributed traces from all microservices, helping you understand request flows and identify performance bottlenecks.
+
+### Step 1: Start Jaeger (Standalone)
+
+If running Jaeger locally without Docker:
+
+```cmd
+cd C:\jaeger-2.19.0-windows-amd64
+jaeger.exe
+```
+
+Jaeger will start with:
+- **Query UI**: http://localhost:16686
+- **OTLP gRPC Receiver**: localhost:4317
+- **OTLP HTTP Receiver**: localhost:4318
+
+### Step 2: Verify Jaeger is Receiving Data
+
+Test the Jaeger API to ensure it's running:
+
+```cmd
+curl http://localhost:16686/api/services
+```
+
+Expected response (initially):
+```json
+{"data":["jaeger"],"total":1,"limit":0,"offset":0,"errors":null}
+```
+
+The `jaeger` service shown is Jaeger's self-monitoring.
+
+### Step 3: Configure Your Application
+
+Your `.env` is already configured:
+
+```bash
+JAEGER_ENDPOINT=http://localhost:4317
+LOG_LEVEL=DEBUG
+ENVIRONMENT=development
+```
+
+**For multiple applications sharing Jaeger:**
+- Each application automatically identifies itself by `service.name`
+- Jaeger UI shows a service dropdown to filter traces
+- No additional Jaeger configuration is needed per application
+
+### Step 4: View Traces in Jaeger UI
+
+Once your application is running (`make dev`):
+
+1. Open **http://localhost:16686**
+2. Select your service from the **Service** dropdown (e.g., `patientvectorhub`)
+3. Click **Find Traces**
+4. Click a trace to see:
+   - Request timeline and latency
+   - Service-to-service calls
+   - Error details and stack traces
+   - Span duration and logs
+
+### Example: Tracing a Request
+
+When you log in to the dashboard:
+1. Browser sends request → Dashboard (SPA)
+2. Dashboard calls API → FastAPI Gateway (port 8000)
+3. Gateway validates token → Keycloak (port 8080)
+4. Gateway queries database → PostgreSQL
+5. Each hop is traced and visible in Jaeger
+
+---
+
+
 
 ### Port Conflict Issues
 If a container fails to start because a port is already allocated:
@@ -237,3 +454,41 @@ Ensure Docker Desktop is open and the Docker daemon is fully started. If WSL 2 e
 The Vault configuration uses a bash script (`scripts\vault_init.sh`).
 - If you have Git for Windows installed, PowerShell will automatically detect `C:\Program Files\Git\bin\bash.exe` and execute it.
 - If not installed, you can install Git for Windows or manually run the commands inside `scripts\vault_init.sh` inside a WSL window.
+
+### Virtual Environment Issues
+
+#### Wrong venv Active When Running Services
+If you get import errors (e.g., `ModuleNotFoundError: No module named 'fastapi'`), ensure the correct venv is activated:
+```cmd
+REM Check which Python executable is being used
+where python
+
+REM This should show your venv path, e.g.:
+REM a:\PatientVectorHub\venv-api-gateway\Scripts\python.exe
+```
+
+#### Stale venv After Dependencies Change
+If you added new dependencies to a `requirements.txt` file:
+```cmd
+REM Activate the corresponding venv and reinstall
+call venv-api-gateway\Scripts\activate.bat
+pip install -r api-gateway\requirements.txt --force-reinstall
+```
+
+#### Switch Between Unified and Separate venvs
+If you want to migrate from one approach to another:
+```cmd
+REM Deactivate current venv
+deactivate
+
+REM Delete old venv(s)
+rmdir /s /q venv
+rmdir /s /q venv-api-gateway venv-ingestion venv-rag-engine venv-vector-store
+
+REM Create new venv setup (see section 2a, 2b, or 2c above)
+```
+
+#### Virtual Environment Not Found in IDE
+If VSCode/PyCharm can't find your Python interpreter:
+- In **VSCode**: Press `Ctrl+Shift+P` → "Python: Select Interpreter" → Choose your venv path (e.g., `.\venv-api-gateway\Scripts\python.exe`)
+- In **PyCharm**: Go to File → Settings → Project → Python Interpreter → Add Interpreter → Existing Environment → Navigate to venv\Scripts\python.exe
