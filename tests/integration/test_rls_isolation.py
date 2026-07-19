@@ -11,6 +11,21 @@ This intentionally does NOT depend on the seeded fixture data from
 seed_data.py — it creates and rolls back its own rows inside a single
 transaction so it is safe to run repeatedly against a shared database
 (including CI's ephemeral Postgres service).
+
+Connection used
+----------------
+Prefers RLS_TEST_DATABASE_URL if set — this should point at a
+NON-superuser, NOBYPASSRLS role with SELECT/INSERT/UPDATE/DELETE on
+tenants/users/patients (see .github/workflows/ci.yml's "Create RLS
+test role" step). Falls back to DATABASE_URL otherwise.
+
+This matters because the default app role in both local Docker Compose
+(POSTGRES_USER=pvh) and CI's ephemeral Postgres service is the initdb
+bootstrap superuser, which bypasses RLS unconditionally regardless of
+FORCE ROW LEVEL SECURITY. Running this test against that role would
+either skip forever (if the bypass check is correct) or produce a
+false failure (if it isn't) — neither actually exercises the policy.
+RLS_TEST_DATABASE_URL is how CI gets a real, non-bypassing signal.
 """
 import os
 import uuid
@@ -23,9 +38,12 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 pytestmark = pytest.mark.integration
 
-POSTGRES_URL = os.getenv(
-    "DATABASE_URL", "postgresql+asyncpg://pvh:pvh_local@localhost:5432/pvh"
-).replace("postgresql+asyncpg://", "postgresql://")
+_RAW_URL = (
+    os.getenv("RLS_TEST_DATABASE_URL")
+    or os.getenv("DATABASE_URL")
+    or "postgresql+asyncpg://pvh:pvh_local@localhost:5432/pvh"
+)
+POSTGRES_URL = _RAW_URL.replace("postgresql+asyncpg://", "postgresql://")
 
 TENANT_A = str(uuid.uuid4())
 TENANT_B = str(uuid.uuid4())
@@ -51,8 +69,23 @@ async def _make_patient(conn, tenant_id: str) -> str:
 
 
 async def _current_user_bypasses_rls(conn) -> bool:
+    """True if the connecting role bypasses RLS entirely.
+
+    Postgres bypasses RLS for a role under TWO independent conditions:
+    rolsuper = true, OR rolbypassrls = true — separate pg_roles
+    columns, not implied by one another. A role created via
+    `CREATE ROLE ... SUPERUSER` gets rolsuper = true but rolbypassrls
+    keeps its own default (false) unless explicitly granted.
+
+    Checking only rolbypassrls misses the common case: the Docker
+    Compose / CI ephemeral Postgres bootstrap user (POSTGRES_USER=pvh)
+    is the initdb bootstrap superuser (rolsuper=true), so a
+    rolbypassrls-only check would incorrectly report "does not
+    bypass RLS" and let the isolation assertions run — and fail,
+    since the superuser sees every row regardless of app.tenant_id.
+    """
     return await conn.fetchval(
-        "SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user"
+        "SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user"
     )
 
 
@@ -108,7 +141,13 @@ class TestCrossTenantIsolation:
         conn = await asyncpg.connect(POSTGRES_URL)
         try:
             if await _current_user_bypasses_rls(conn):
-                pytest.skip("Current DB role bypasses RLS; cannot assert isolation against this user")
+                pytest.skip(
+                    "Current DB role bypasses RLS (superuser or BYPASSRLS); "
+                    "cannot assert isolation against this user. Set "
+                    "RLS_TEST_DATABASE_URL to a non-superuser, NOBYPASSRLS "
+                    "role to get a real signal — see ci.yml's "
+                    "'Create RLS test role' step."
+                )
 
             tx = conn.transaction()
             await tx.start()
@@ -151,7 +190,11 @@ class TestCrossTenantIsolation:
         conn = await asyncpg.connect(POSTGRES_URL)
         try:
             if await _current_user_bypasses_rls(conn):
-                pytest.skip("Current DB role bypasses RLS; cannot assert fail-closed behavior")
+                pytest.skip(
+                    "Current DB role bypasses RLS (superuser or BYPASSRLS); "
+                    "cannot assert fail-closed behavior against this user. "
+                    "Set RLS_TEST_DATABASE_URL — see ci.yml."
+                )
 
             tx = conn.transaction()
             await tx.start()

@@ -65,7 +65,15 @@ jobs:
         run: |
           pip install pytest pytest-asyncio pytest-cov \
             fastapi httpx pydantic>=2.0 sqlalchemy>=2.0 \
-            python-jose[cryptography] redis
+            python-jose[cryptography] redis \
+            weaviate-client qdrant-client python-dotenv
+          # weaviate-client/qdrant-client are required by
+          # tests/unit/test_weaviate_schema.py, which imports
+          # scripts/setup_weaviate_schema.py and weaviate.classes.config
+          # directly (no ImportError guard at test-module scope, unlike
+          # the script it tests). Without these installed, that test file
+          # fails to *collect* -- which fails the whole pytest run, not
+          # just that one test.
 
       - name: Run unit tests
         env:
@@ -126,16 +134,44 @@ jobs:
         run: |
           pip install pytest pytest-asyncio pytest-cov \
             fastapi httpx pydantic>=2.0 sqlalchemy>=2.0 asyncpg \
-            alembic python-jose[cryptography] redis aiokafka
+            alembic python-jose[cryptography] redis aiokafka \
+            python-dotenv
 
       - name: Run Alembic migrations
         env:
           DATABASE_URL: postgresql+asyncpg://pvh:pvh_local@localhost:5432/pvh
         run: cd api-gateway && python -m alembic upgrade head
 
+      - name: Create RLS test role (non-superuser, exercises RLS policies)
+        env:
+          PGPASSWORD: pvh_local
+        run: |
+          # POSTGRES_USER=pvh above is the initdb bootstrap superuser --
+          # it bypasses RLS unconditionally (rolsuper=true), regardless
+          # of FORCE ROW LEVEL SECURITY. Testing isolation against it
+          # would either always skip or produce false failures; neither
+          # actually proves the policy works. This role is a plain,
+          # non-superuser, NOBYPASSRLS login used only by
+          # test_rls_isolation.py to get a real, non-bypassing signal.
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+          psql -h localhost -U pvh -d pvh -v ON_ERROR_STOP=1 <<'SQL'
+            DO $$
+            BEGIN
+              IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'pvh_rls_test') THEN
+                CREATE ROLE pvh_rls_test LOGIN PASSWORD 'pvh_rls_test'
+                  NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE;
+              END IF;
+            END
+            $$;
+            GRANT CONNECT ON DATABASE pvh TO pvh_rls_test;
+            GRANT USAGE ON SCHEMA public TO pvh_rls_test;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON tenants, users, patients TO pvh_rls_test;
+          SQL
+
       - name: Run integration tests
         env:
           DATABASE_URL: postgresql+asyncpg://pvh:pvh_local@localhost:5432/pvh
+          RLS_TEST_DATABASE_URL: postgresql+asyncpg://pvh_rls_test:pvh_rls_test@localhost:5432/pvh
           REDIS_URL: redis://localhost:6379/0
           ENVIRONMENT: test
         run: |
