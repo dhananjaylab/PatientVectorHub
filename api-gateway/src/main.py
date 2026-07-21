@@ -3,8 +3,9 @@ PatientVectorHub — API Gateway
 FastAPI application factory.
 
 Phase 1: health endpoints, structured logging, exception handling.
-Phase 2: DB session, models, CRUD, dependency injection.
-Phase 3: Keycloak JWT middleware, RBAC.
+Phase 2: DB session (db/session.py, db/crud.py), full core schema.
+Phase 3: Keycloak JWT + API-key middleware, RBAC guards, first protected
+         router (admin — api keys, users).
 """
 import uuid
 from contextlib import asynccontextmanager
@@ -16,6 +17,7 @@ from fastapi.responses import JSONResponse
 from .config import settings
 from .errors import PVHError, pvh_exception_handler
 from .logging_config import configure_logging
+from .routers.admin import router as admin_router
 from .routers.health import router as health_router
 
 configure_logging(settings.LOG_LEVEL)
@@ -30,9 +32,26 @@ async def lifespan(app: FastAPI):
     log.info("Starting PatientVectorHub API Gateway",
              extra={"environment": settings.ENVIRONMENT, "version": "1.0.0"})
 
-    # Phase 1 stubs — replaced in later phases
-    app.state.db_pool = None   # Phase 2: asyncpg pool
-    app.state.vault   = None   # Phase 2: hvac.Client
+    # Lightweight asyncpg pool used ONLY by /ready's "SELECT 1" liveness
+    # check. Deliberately separate from db/session.py's SQLAlchemy async
+    # engine (which every tenant-scoped route uses via get_tenant_session())
+    # — this pool never runs app.tenant_id-scoped queries, so it doesn't
+    # need to exist per-request and can be a single small shared pool.
+    try:
+        import asyncpg
+        app.state.db_pool = await asyncpg.create_pool(
+            settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://"),
+            min_size=1, max_size=5, command_timeout=5,
+        )
+        log.info("Postgres readiness pool ready")
+    except Exception as e:
+        # Non-fatal — /ready reports "not_initialized" rather than crashing
+        # app startup. Matches the existing graceful-degradation pattern in
+        # routers/health.py.
+        log.warning("Postgres readiness pool unavailable at startup: %s", e)
+        app.state.db_pool = None
+
+    app.state.vault   = None   # Phase 10 (Security): hvac.Client
     app.state.kafka   = None   # Phase 4: AIOKafkaProducer
 
     log.info("API Gateway ready", extra={"routes": len(app.routes)})
@@ -43,6 +62,8 @@ async def lifespan(app: FastAPI):
         await app.state.kafka.stop()
     if getattr(app.state, "db_pool", None):
         await app.state.db_pool.close()
+    from .db.session import dispose_engine
+    await dispose_engine()
     log.info("Shutdown complete")
 
 
@@ -100,13 +121,17 @@ def create_app() -> FastAPI:
     )
     app.middleware("http")(request_id_middleware)
 
-    # Keycloak middleware is enabled once api-gateway/src/middleware/auth.py exists.
+    # Keycloak + API-key auth context middleware — populates request.state
+    # for middleware/rbac.py's require_role()/require_min_role() guards.
+    # Only mounted when AUTH_ENABLED=true (local dev default: false, so
+    # Phase 2/3 work doesn't require a running Keycloak container).
     if settings.AUTH_ENABLED:
         from .middleware.auth import KeycloakJWTMiddleware
 
         app.add_middleware(
             KeycloakJWTMiddleware,
             jwks_url=settings.KEYCLOAK_JWKS_URL,
+            issuer=getattr(settings, "KEYCLOAK_ISSUER", None),
             public_paths=frozenset({
                 "/health", "/ready", "/docs", "/redoc",
                 "/openapi.json", "/metrics",
@@ -119,16 +144,15 @@ def create_app() -> FastAPI:
 
     # ── Routers ───────────────────────────────────────────────────────────────
     app.include_router(health_router)
+    app.include_router(admin_router, prefix="/v1/admin", tags=["Admin"])
 
     # Phase 8+ routers (uncomment as phases complete):
     # from .routers.ingest import router as ingest_router
     # from .routers.query  import router as query_router
     # from .routers.audit  import router as audit_router
-    # from .routers.admin  import router as admin_router
     # app.include_router(ingest_router, prefix="/v1/ingest", tags=["Ingestion"])
     # app.include_router(query_router,  prefix="/v1/query",  tags=["Query"])
     # app.include_router(audit_router,  prefix="/v1/audit",  tags=["Audit"])
-    # app.include_router(admin_router,  prefix="/v1/admin",  tags=["Admin"])
 
     return app
 
