@@ -1,36 +1,41 @@
 # ── Web framework ─────────────────────────────────────────────────────────────
-fastapi
-uvicorn[standard]
-python-multipart
+fastapi>=0.139.2,<0.140.0
+uvicorn[standard]>=0.34.0,<0.35.0
+python-multipart>=0.0.20,<0.1.0
 
 # ── Settings ──────────────────────────────────────────────────────────────────
-pydantic
-pydantic-settings
-python-dotenv
+pydantic>=2.13.4,<2.14.0
+pydantic-settings>=2.14.2,<2.15.0
+python-dotenv>=1.1.0,<1.2.0
 
 # ── Database ──────────────────────────────────────────────────────────────────
-sqlalchemy[asyncio]
-asyncpg
-psycopg2
-alembic
+sqlalchemy[asyncio]>=2.0.51,<2.1.0
+asyncpg>=0.31.0,<0.32.0
+psycopg2-binary>=2.9.10,<2.10.0
+alembic>=1.18.5,<1.19.0
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
-python-jose[cryptography]
-httpx
+# PyJWT, not python-jose: python-jose has had no meaningful release in
+# years and depends on the still-unpatched `ecdsa` package (timing
+# side-channel). PyJWT is actively maintained and ships PyJWKClient, which
+# is what api-gateway/src/middleware/auth.py uses for Keycloak JWKS
+# fetch+cache. See middleware/auth.py's module docstring.
+PyJWT[crypto]>=2.13.0,<2.14.0
+httpx>=0.28.1,<0.29.0
 
-# # ── Messaging ─────────────────────────────────────────────────────────────────
-# aiokafka
+# ── Messaging (Phase 4) ──────────────────────────────────────────────────────
+# aiokafka>=0.12.0,<0.13.0
 
-# # ── Secrets ───────────────────────────────────────────────────────────────────
-# hvac
+# ── Secrets (Phase 10) ───────────────────────────────────────────────────────
+# hvac>=2.3.0,<2.4.0
 
-# # ── Observability ─────────────────────────────────────────────────────────────
-# prometheus-client
-# opentelemetry-api
-# opentelemetry-sdk
-# opentelemetry-instrumentation-fastapi
-# opentelemetry-instrumentation-sqlalchemy
-# opentelemetry-exporter-otlp-proto-grpc
+# ── Observability (Phase 10) ─────────────────────────────────────────────────
+# prometheus-client>=0.21.0,<0.22.0
+# opentelemetry-api>=1.29.0,<1.30.0
+# opentelemetry-sdk>=1.29.0,<1.30.0
+# opentelemetry-instrumentation-fastapi>=0.50b0,<0.51
+# opentelemetry-instrumentation-sqlalchemy>=0.50b0,<0.51
+# opentelemetry-exporter-otlp-proto-grpc>=1.29.0,<1.30.0
 
-# # ── Utilities ─────────────────────────────────────────────────────────────────
-# tenacity
+# ── Utilities (Phase 4+) ─────────────────────────────────────────────────────
+# tenacity>=9.0.0,<10.0.0
