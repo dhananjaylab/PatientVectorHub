@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     EMBEDDING_PROVIDER: str = "openai"
     EMBEDDING_MODEL_URL: str = "http://localhost:8001"
     EMBEDDING_MODEL_VERSION: str = "text-embedding-3-large"
+    # See vector-store/src/config.py for the full rationale — kept in sync
+    # across ingestion/rag-engine/vector-store since all three need to agree
+    # on the vector size written to/read from Qdrant and Weaviate.
+    EMBEDDING_DIMENSIONS: int = 1536
 
     # ── Vault ─────────────────────────────────────────────────────────────────
     VAULT_ADDR: str = "http://localhost:8200"
