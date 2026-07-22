@@ -1,15 +1,15 @@
 # ── Vector stores ─────────────────────────────────────────────────────────────
-weaviate-client
-qdrant-client
+weaviate-client>=4.20.4,<4.21.0
+qdrant-client>=1.18.0,<1.19.0
 
-python-dotenv
+python-dotenv>=1.1.0,<1.2.0
 
-# ── HTTP client ────────────────────────────────────────────────────────────────
-# httpx
+# ── Settings & Validation (needed by vector-store/src/config.py) ────────────────
+pydantic>=2.13.4,<2.14.0
+pydantic-settings>=2.14.2,<2.15.0
 
-# # ── Settings & Validation ──────────────────────────────────────────────────────
-# pydantic
-# pydantic-settings
+# ── HTTP client (Phase 6+) ───────────────────────────────────────────────────
+# httpx>=0.28.1,<0.29.0
 
-# # ── Numerics ───────────────────────────────────────────────────────────────────
-# numpy
+# ── Numerics (Phase 6+) ───────────────────────────────────────────────────────
+# numpy>=2.2.0,<3.0.0

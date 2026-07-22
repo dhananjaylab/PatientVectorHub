@@ -25,7 +25,7 @@ jobs:
       - name: Install Python deps
         run: |
           pip install ruff mypy \
-            pydantic>=2.0 sqlalchemy>=2.0 fastapi httpx
+            pydantic>=2.13.4 sqlalchemy>=2.0.51 fastapi>=0.139.2 httpx
 
       - name: Ruff lint
         run: ruff check .
@@ -64,16 +64,25 @@ jobs:
       - name: Install deps
         run: |
           pip install pytest pytest-asyncio pytest-cov \
-            fastapi httpx pydantic>=2.0 sqlalchemy>=2.0 \
-            python-jose[cryptography] redis \
-            weaviate-client qdrant-client python-dotenv
-          # weaviate-client/qdrant-client are required by
-          # tests/unit/test_weaviate_schema.py, which imports
+            fastapi>=0.139.2 httpx pydantic>=2.13.4 "pydantic-settings>=2.14.2" \
+            "sqlalchemy[asyncio]>=2.0.51" asyncpg python-dotenv \
+            "PyJWT[crypto]>=2.13.0" redis \
+            weaviate-client qdrant-client
+          # pydantic-settings and asyncpg were previously missing here even
+          # though api-gateway/src/config.py (BaseSettings) and the Phase 2
+          # db/session.py (create_async_engine against a postgresql+asyncpg
+          # URL) both need them at import time — without them, any test
+          # importing src.config or src.db.session fails to *collect*,
+          # which fails the whole pytest run, not just the affected tests.
+          # Same reasoning applies to weaviate-client/qdrant-client below
+          # (needed by tests/unit/test_weaviate_schema.py, which imports
           # scripts/setup_weaviate_schema.py and weaviate.classes.config
-          # directly (no ImportError guard at test-module scope, unlike
-          # the script it tests). Without these installed, that test file
-          # fails to *collect* -- which fails the whole pytest run, not
-          # just that one test.
+          # directly, with no ImportError guard at test-module scope).
+          #
+          # PyJWT replaces python-jose here: python-jose has had no
+          # meaningful release in years and depends on the still-unpatched
+          # `ecdsa` package (timing side-channel); api-gateway/src/
+          # middleware/auth.py is written against PyJWT's PyJWKClient.
 
       - name: Run unit tests
         env:
@@ -82,6 +91,7 @@ jobs:
           REDIS_URL: redis://localhost:6379/0
           VAULT_ADDR: http://localhost:8200
           VAULT_TOKEN: dev-root-token
+          AUTH_ENABLED: "false"
         run: |
           pytest tests/unit/ -v \
             --cov=api-gateway/src \
@@ -133,8 +143,9 @@ jobs:
       - name: Install deps
         run: |
           pip install pytest pytest-asyncio pytest-cov \
-            fastapi httpx pydantic>=2.0 sqlalchemy>=2.0 asyncpg \
-            alembic python-jose[cryptography] redis aiokafka \
+            fastapi>=0.139.2 httpx pydantic>=2.13.4 "pydantic-settings>=2.14.2" \
+            "sqlalchemy[asyncio]>=2.0.51" asyncpg \
+            alembic>=1.18.5 "PyJWT[crypto]>=2.13.0" redis aiokafka \
             python-dotenv
 
       - name: Run Alembic migrations
@@ -152,7 +163,7 @@ jobs:
           # would either always skip or produce false failures; neither
           # actually proves the policy works. This role is a plain,
           # non-superuser, NOBYPASSRLS login used only by
-          # test_rls_isolation.py to get a real, non-bypassing signal.
+          # test_rls_isolation*.py to get a real, non-bypassing signal.
           sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
           psql -h localhost -U pvh -d pvh -v ON_ERROR_STOP=1 <<'SQL'
             DO $$
@@ -165,7 +176,15 @@ jobs:
             $$;
             GRANT CONNECT ON DATABASE pvh TO pvh_rls_test;
             GRANT USAGE ON SCHEMA public TO pvh_rls_test;
-            GRANT SELECT, INSERT, UPDATE, DELETE ON tenants, users, patients TO pvh_rls_test;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON tenants, users, patients,
+              ingestion_jobs, documents, api_keys, audit_logs, query_logs
+              TO pvh_rls_test;
+            -- Deliberately NOT granting EXECUTE on resolve_api_key_tenant()
+            -- here: test_rls_isolation_core_tables.py's
+            -- TestApiKeyResolverFailsClosed asserts the ADR-010 fail-closed
+            -- default (zero rows OR permission-denied), which is exactly
+            -- what an ungranted EXECUTE produces. Granting it here would
+            -- test the wrong thing.
           SQL
 
       - name: Run integration tests
