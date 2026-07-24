@@ -1,42 +1,40 @@
-# ── Core ──────────────────────────────────────────────────────────────────────
-fastapi
-uvicorn[standard]
-pydantic
-pydantic-settings
+# ── PatientVectorHub — ingestion service dependencies ────────────────────────
+# NOTE: the original ingestion/requirements.txt came through unreadable
+# ("[Binary file]") when this repo was pasted into the planning conversation,
+# so this is a complete recommended file for Phase 4, not a diff. Reconcile
+# any already-pinned versions you have locally against this before installing
+# — this file assumes nothing else was already pinned.
 
-# ── Database ──────────────────────────────────────────────────────────────────
-sqlalchemy[asyncio]
-asyncpg
-psycopg[binary]  # Migrated from psycopg2-binary
-alembic==1.14.1
+# ── Settings ──────────────────────────────────────────────────────────────────
+pydantic>=2.13.4,<2.14.0
+pydantic-settings>=2.14.2,<2.15.0
+python-dotenv>=1.1.0,<1.2.0
 
-# ── Task queue ────────────────────────────────────────────────────────────────
-celery[redis]
-redis
-aiokafka
-kafka-python
+# ── Database (sync — Celery workers, see ingestion/src/db/session.py) ────────
+sqlalchemy>=2.0.51,<2.1.0
+psycopg2-binary>=2.9.10,<2.10.0
 
-# ── Document parsers ──────────────────────────────────────────────────────────
-PyMuPDF
-hl7
-boto3
+# ── Object storage (Cloudflare R2, S3-compatible — ADR-009) ──────────────────
+boto3>=1.35.0,<2.0.0
 
-# -- Embeddings ---------------------------------------------------------------
-openai
+# ── Document parsing ──────────────────────────────────────────────────────────
+pymupdf>=1.24.0,<2.0.0      # import pymupdf (not the legacy `fitz` alias)
+hl7>=0.4.5,<0.5.0           # python-hl7 — pip name "hl7", import name "hl7"
 
-# ── Utilities ─────────────────────────────────────────────────────────────────
-# NOTE: LangChain removed - not currently used (will add when RAG logic is implemented)
-# NOTE: current embeddings use OpenAI. torch and transformers are only needed for the future local embedding-server path.
-numpy
-httpx
+# ── Chunking ──────────────────────────────────────────────────────────────────
+langchain-text-splitters>=0.3.0,<0.4.0   # NOT the monolithic `langchain` package
 
-# ── Vector stores ─────────────────────────────────────────────────────────────
-weaviate-client
-qdrant-client
+# ── Embeddings (OpenAI — ADR-009, not self-hosted clinical-bert) ─────────────
+openai>=1.50.0,<2.0.0
+tenacity>=9.0.0,<10.0.0
 
-# ── Secrets ───────────────────────────────────────────────────────────────────
-hvac
+# ── Task queue & messaging ────────────────────────────────────────────────────
+celery[redis]>=5.4.0,<5.5.0
+aiokafka>=0.11.0,<0.12.0
 
-# ── Utilities ─────────────────────────────────────────────────────────────────
-tenacity
-prometheus-client
+# ── Vector store (shared package import — see MANUAL_INTEGRATION_NOTES.md) ───
+weaviate-client>=4.20.4,<4.21.0
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+pytest>=8.0.0,<9.0.0
+pytest-asyncio>=0.24.0,<0.25.0
