@@ -5,6 +5,9 @@ Every function here takes an AsyncSession that MUST already be scoped via
 db.session.get_tenant_session() (that's what deps.get_db() hands routes),
 except the small `tenants`-only and API-key-resolution functions explicitly
 marked otherwise below.
+
+Phase 4 addition: set_job_doc_count_total() — the only new function in
+this file. Everything else below is unchanged from the current repo.
 """
 from __future__ import annotations
 
@@ -184,6 +187,18 @@ async def create_ingestion_job(
         {"id": jid, "name": name, "src": source_type, "cfg": json.dumps(source_config), "uid": created_by},
     )
     return {"id": jid, "status": "queued"}
+
+
+async def set_job_doc_count_total(db: AsyncSession, *, job_id: str, total: int) -> None:
+    """Phase 4 addition. create_ingestion_job() doesn't know doc_count_total
+    up front (it's determined by the routers/ingest.py caller from the
+    submitted DocumentRef list) — this sets it once the job row already
+    exists, in the same request/transaction as the per-document
+    create_document() + publish_document_ingest() calls."""
+    await db.execute(
+        text("UPDATE ingestion_jobs SET doc_count_total = :total WHERE id = :jid"),
+        {"total": total, "jid": job_id},
+    )
 
 
 async def get_ingestion_job(db: AsyncSession, job_id: str) -> dict | None:
