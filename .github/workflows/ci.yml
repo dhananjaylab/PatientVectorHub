@@ -68,6 +68,13 @@ jobs:
             "sqlalchemy[asyncio]>=2.0.51" asyncpg python-dotenv \
             "PyJWT[crypto]>=2.13.0" redis \
             weaviate-client qdrant-client
+          # Phase 4 additions: parsers/chunker/embedder unit tests
+          # (tests/unit/test_ingestion_*.py) import these directly, with
+          # R2/network calls always mocked (decision: no live R2
+          # credentials needed in CI). PyMuPDF/hl7/langchain-text-splitters
+          # here are lightweight and network-free at import time.
+          pip install boto3 pymupdf hl7 langchain-text-splitters openai tenacity \
+            "celery[redis]" aiokafka
           # pydantic-settings and asyncpg were previously missing here even
           # though api-gateway/src/config.py (BaseSettings) and the Phase 2
           # db/session.py (create_async_engine against a postgresql+asyncpg
@@ -92,6 +99,7 @@ jobs:
           VAULT_ADDR: http://localhost:8200
           VAULT_TOKEN: dev-root-token
           AUTH_ENABLED: "false"
+          OPENAI_API_KEY: sk-test-not-a-real-key
         run: |
           pytest tests/unit/ -v \
             --cov=api-gateway/src \
@@ -131,6 +139,48 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
+      # Phase 4 addition: Kafka (KRaft, single broker — mirrors
+      # docker-compose.yml's local dev config) so
+      # tests/integration/test_ingestion_end_to_end.py and
+      # test_ingestion_dlq_end_to_end.py have a real doc-ingest /
+      # doc-dlq broker to talk to.
+      kafka:
+        image: apache/kafka:3.6.0
+        ports:
+          - 9092:9092
+        env:
+          KAFKA_NODE_ID: 1
+          KAFKA_PROCESS_ROLES: broker,controller
+          KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+          KAFKA_CONTROLLER_QUORUM_VOTERS: "1@localhost:9093"
+          KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+          KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+          KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+          CLUSTER_ID: pvh-ci-cluster-id-001
+        options: >-
+          --health-cmd "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 12
+      # Phase 4 addition: Weaviate, so test_ingestion_end_to_end.py can
+      # assert a real vector actually landed in the tenant's shard.
+      weaviate:
+        image: semitechnologies/weaviate:1.24.1
+        ports:
+          - 8080:8080
+          - 50051:50051
+        env:
+          AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+          PERSISTENCE_DATA_PATH: /var/lib/weaviate
+          DEFAULT_VECTORIZER_MODULE: none
+          CLUSTER_HOSTNAME: weaviate-ci
+        options: >-
+          --health-cmd "wget -qO- http://localhost:8080/v1/.well-known/ready"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
 
     steps:
       - uses: actions/checkout@v4
@@ -147,11 +197,30 @@ jobs:
             "sqlalchemy[asyncio]>=2.0.51" asyncpg \
             alembic>=1.18.5 "PyJWT[crypto]>=2.13.0" redis aiokafka \
             python-dotenv
+          # Phase 4: full ingestion stack for the end-to-end tests
+          pip install boto3 pymupdf hl7 langchain-text-splitters openai tenacity \
+            "celery[redis]" weaviate-client psycopg2-binary
 
       - name: Run Alembic migrations
         env:
           DATABASE_URL: postgresql+asyncpg://pvh:pvh_local@localhost:5432/pvh
         run: cd api-gateway && python -m alembic upgrade head
+
+      - name: Seed one tenant for ingestion tests
+        env:
+          DATABASE_URL_SYNC: postgresql+psycopg2://pvh:pvh_local@localhost:5432/pvh
+        run: python -u scripts/seed_data.py
+
+      - name: Set up Weaviate PatientDocument collection
+        env:
+          WEAVIATE_HOST: localhost
+          WEAVIATE_PORT: "8080"
+        run: python scripts/setup_weaviate_schema.py
+
+      - name: Create Kafka topics
+        env:
+          KAFKA_BROKERS: localhost:9092
+        run: python scripts/create_kafka_topics.py
 
       - name: Create RLS test role (non-superuser, exercises RLS policies)
         env:
@@ -190,9 +259,18 @@ jobs:
       - name: Run integration tests
         env:
           DATABASE_URL: postgresql+asyncpg://pvh:pvh_local@localhost:5432/pvh
+          DATABASE_URL_SYNC: postgresql+psycopg2://pvh:pvh_local@localhost:5432/pvh
           RLS_TEST_DATABASE_URL: postgresql+asyncpg://pvh_rls_test:pvh_rls_test@localhost:5432/pvh
           REDIS_URL: redis://localhost:6379/0
+          KAFKA_BROKERS: localhost:9092
+          WEAVIATE_HOST: localhost
+          WEAVIATE_PORT: "8080"
           ENVIRONMENT: test
+          # OPENAI_API_KEY intentionally NOT set here — the one test that
+          # needs a real embedding call (test_ingestion_end_to_end.py)
+          # self-skips when it's absent (see that file's pytestmark). Set
+          # it as a repo secret if you want that specific test to run in
+          # CI; it will incur a small real OpenAI cost per run.
         run: |
           pytest tests/integration/ -v -m integration --tb=short -q
 
@@ -215,7 +293,7 @@ jobs:
           format: table
 
       - name: Build ingestion image
-        run: docker build -t pvh-ingestion:${{ github.sha }} ingestion/
+        run: docker build -f ingestion/Dockerfile -t pvh-ingestion:${{ github.sha }} .
 
       - name: Trivy scan ingestion
         uses: aquasecurity/trivy-action@master
