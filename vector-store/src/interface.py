@@ -1,7 +1,10 @@
 """
 VectorStoreInterface — ABC for Weaviate and Qdrant implementations.
-Phase 1: interface definition only.
-Concrete implementations (WeaviateStore, QdrantStore) added in Phase 6.
+
+Phase 4 update: get_store() now actually returns a working WeaviateStore
+(see weaviate_store.py, ADR-011) instead of unconditionally raising
+NotImplementedError. QdrantStore stays unimplemented — the DR failover
+path is explicitly Phase 6+ scope.
 """
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -53,15 +56,13 @@ class VectorStoreInterface(ABC):
 
 def get_store(tenant_id: str) -> VectorStoreInterface:
     """
-    Factory — returns the correct backend based on VECTOR_BACKEND env var.
-    Phase 6 adds WeaviateStore and QdrantStore imports here.
+    Factory — returns the correct backend based on VECTOR_BACKEND.
+    Phase 4 (ADR-011): WeaviateStore is real. QdrantStore (DR path)
+    remains Phase 6+.
     """
     import os
     backend = os.getenv("VECTOR_BACKEND", "weaviate")
     if backend == "qdrant":
-        # from .qdrant_store import QdrantStore
-        # return QdrantStore(tenant_id)
-        raise NotImplementedError("QdrantStore available from Phase 6")
-    # from .weaviate_store import WeaviateStore
-    # return WeaviateStore(tenant_id)
-    raise NotImplementedError("WeaviateStore available from Phase 6")
+        raise NotImplementedError("QdrantStore (DR path) lands in Phase 6")
+    from .weaviate_store import WeaviateStore
+    return WeaviateStore(tenant_id)
