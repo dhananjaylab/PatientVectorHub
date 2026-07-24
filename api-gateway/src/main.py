@@ -20,6 +20,9 @@ from .logging_config import configure_logging
 from .routers.admin import router as admin_router
 from .routers.health import router as health_router
 
+from aiokafka import AIOKafkaProducer
+from .config import settings
+
 configure_logging(settings.LOG_LEVEL)
 
 import logging
@@ -53,6 +56,30 @@ async def lifespan(app: FastAPI):
 
     app.state.vault   = None   # Phase 10 (Security): hvac.Client
     app.state.kafka   = None   # Phase 4: AIOKafkaProducer
+
+    kafka_kwargs = {
+        "bootstrap_servers": settings.KAFKA_BROKERS,
+        "security_protocol": getattr(settings, "KAFKA_SECURITY_PROTOCOL", "PLAINTEXT"),
+    }
+    if getattr(settings, "KAFKA_USERNAME", "") and getattr(settings, "KAFKA_PASSWORD", ""):
+        kafka_kwargs.update(
+            sasl_mechanism=getattr(settings, "KAFKA_SASL_MECHANISM", "PLAIN"),
+            sasl_plain_username=settings.KAFKA_USERNAME,
+            sasl_plain_password=settings.KAFKA_PASSWORD,
+        )
+    # IMPORTANT: aiokafka takes `ssl_context` (an ssl.SSLContext), NOT a
+    # bare `ssl_cafile` string — this bit me once already while building
+    # ingestion's dlq_producer.py/stream_consumer.py (see
+    # ingestion/src/workers/kafka_config.py's docstring). Use
+    # aiokafka.helpers.create_ssl_context(), not a raw path kwarg.
+    if getattr(settings, "KAFKA_SSL_CAFILE", ""):
+        from aiokafka.helpers import create_ssl_context
+        kafka_kwargs["ssl_context"] = create_ssl_context(cafile=settings.KAFKA_SSL_CAFILE)
+
+    app.state.kafka = AIOKafkaProducer(**kafka_kwargs)
+    await app.state.kafka.start()
+    yield
+    await app.state.kafka.stop()
 
     log.info("API Gateway ready", extra={"routes": len(app.routes)})
     yield
@@ -143,8 +170,12 @@ def create_app() -> FastAPI:
     # app.add_middleware(AuditLogMiddleware)
 
     # ── Routers ───────────────────────────────────────────────────────────────
+    from .routers import ingest  # add this import
+
     app.include_router(health_router)
     app.include_router(admin_router, prefix="/v1/admin", tags=["Admin"])
+    app.include_router(ingest.router, prefix="/v1/ingest", tags=["Ingestion"])
+
 
     # Phase 8+ routers (uncomment as phases complete):
     # from .routers.ingest import router as ingest_router
