@@ -2,6 +2,15 @@
 PatientVectorHub — API Gateway configuration.
 Uses Pydantic BaseSettings for type-safe environment variable loading.
 All values can be overridden via environment variables or .env file.
+
+Phase 4 fix: added KAFKA_SECURITY_PROTOCOL / KAFKA_USERNAME /
+KAFKA_PASSWORD / KAFKA_SASL_MECHANISM / KAFKA_SSL_CAFILE — main.py's
+Kafka producer setup already read these via getattr(settings, ..., default)
+so it never crashed without them, but with extra="ignore" below, any
+matching env vars were being silently dropped rather than attached to
+`settings` — meaning SASL/SSL auth could never actually engage no matter
+what was set in .env. Mirrors the same fields already added to
+ingestion/src/config.py.
 """
 from pathlib import Path
 
@@ -27,6 +36,13 @@ class Settings(BaseSettings):
     # ── Cache & Messaging ─────────────────────────────────────────────────────
     REDIS_URL: str = "redis://localhost:6379/0"
     KAFKA_BROKERS: str = "localhost:9092"
+    KAFKA_SECURITY_PROTOCOL: str = "PLAINTEXT"
+    KAFKA_USERNAME: str = ""
+    KAFKA_PASSWORD: str = ""
+    KAFKA_SASL_MECHANISM: str = "PLAIN"
+    KAFKA_SSL_CAFILE: str = ""
+    KAFKA_SSL_CERTFILE: str = ""
+    KAFKA_SSL_KEYFILE: str = ""
 
     VECTOR_BACKEND: str = "weaviate"
     WEAVIATE_HOST: str = "localhost"
