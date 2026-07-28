@@ -3,9 +3,10 @@
 Create Qdrant collections for all tenants (DR vector store).
 Safe to run multiple times - skips existing collections.
 """
+
 import os
-from pathlib import Path
 import time
+from pathlib import Path
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
@@ -13,17 +14,25 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
-QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6334"))
+# 6333 = REST port (QdrantClient's `port=` kwarg). 6334 is gRPC — a
+# separate kwarg, unused here. Was 6334 before Phase 6/ADR-013.
+QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 
 # Was hardcoded to 768 (a leftover from the pre-ADR-009 self-hosted
-# clinical-bert plan, which used 768-dim embeddings). ADR-009 moved
-# embeddings to OpenAI text-embedding-3-large; EMBEDDING_DIMENSIONS is the
-# single source of truth for the chosen (possibly shortened, via OpenAI's
-# `dimensions` param) vector size — see vector-store/src/config.py for the
-# full rationale on the 1536 default. Changing this after any vectors have
-# been written requires re-embedding, since Qdrant collections have a fixed
-# vector size once created.
-EMBEDDING_DIMENSIONS = int(os.getenv("EMBEDDING_DIMENSIONS", "1536"))
+# clinical-bert plan, which used 768-dim embeddings). ADR-009 moved the
+# default embeddings path to OpenAI text-embedding-3-large (1536-dim, see
+# vector-store/src/config.py for the full rationale). ADR-012 then added a
+# second provider — clinical_bert, 768-dim, Hugging Face-hosted — which
+# this script didn't account for until now (ADR-013): the collection's
+# fixed vector size must match whichever EMBEDDING_PROVIDER is actually
+# active, not always assume OpenAI. Changing this after any vectors have
+# been written requires re-embedding, since Qdrant collections have a
+# fixed vector size once created.
+EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "openai")
+if EMBEDDING_PROVIDER == "clinical_bert":
+    EMBEDDING_DIMENSIONS = int(os.getenv("CLINICAL_BERT_DIMENSIONS", "768"))
+else:
+    EMBEDDING_DIMENSIONS = int(os.getenv("EMBEDDING_DIMENSIONS", "1536"))
 
 TENANT_IDS = [
     "00000000-0000-0000-0000-000000000001",
@@ -56,7 +65,9 @@ def create_collections() -> None:
     try:
         from qdrant_client import QdrantClient
         from qdrant_client.models import (
-            Distance, VectorParams, HnswConfigDiff,
+            Distance,
+            HnswConfigDiff,
+            VectorParams,
         )
     except ImportError:
         print("  qdrant-client not installed - skipping Qdrant setup")

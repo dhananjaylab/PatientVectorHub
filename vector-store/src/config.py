@@ -1,4 +1,5 @@
 """PatientVectorHub — Vector Store service configuration."""
+
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -19,7 +20,13 @@ class VectorSettings(BaseSettings):
     WEAVIATE_URL: str = ""
     WEAVIATE_API_KEY: str = ""
     QDRANT_HOST: str = "localhost"
-    QDRANT_PORT: int = 6334
+    # 6333 is Qdrant's REST/HTTP port — what AsyncQdrantClient's `port=`
+    # kwarg expects (gRPC is a *separate* `grpc_port` kwarg, default 6334,
+    # unused here since qdrant_store.py doesn't set prefer_grpc=True).
+    # This was 6334 before Phase 6 (ADR-013) — a latent bug that never
+    # surfaced because QdrantStore didn't exist yet to actually connect
+    # with it. docker-compose.yml already exposes both 6333 and 6334.
+    QDRANT_PORT: int = 6333
     QDRANT_URL: str = ""
     QDRANT_API_KEY: str = ""
     EMBEDDING_PROVIDER: str = "openai"
@@ -37,6 +44,15 @@ class VectorSettings(BaseSettings):
     # after any vectors have been written requires re-embedding, since
     # Qdrant collections have a fixed vector size.
     EMBEDDING_DIMENSIONS: int = 1536
+
+    # ADR-012 introduced a second provider (clinical_bert, HF-hosted,
+    # 768-dim) but that ADR explicitly flagged this file as not yet
+    # dimension-aware for it. ADR-013 resolves that:
+    # scripts/setup_qdrant_schema.py now picks EMBEDDING_DIMENSIONS or
+    # CLINICAL_BERT_DIMENSIONS based on EMBEDDING_PROVIDER, instead of
+    # always assuming the OpenAI path.
+    CLINICAL_BERT_DIMENSIONS: int = 768
+
     LOG_LEVEL: str = "INFO"
     ENVIRONMENT: str = "development"
 

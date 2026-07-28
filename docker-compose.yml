@@ -197,29 +197,14 @@ services:
           memory: 1g
     logging: *default-logging
 
-  # ── Embedding Model Server (clinical-bert; parked per ADR-009) ────────────
-  embedding-model:
-    build:
-      context: ./ingestion/embedding-server
-      dockerfile: Dockerfile
-    container_name: pvh-embedding
-    ports:
-      - "8001:8001"
-    environment:
-      MODEL_NAME: emilyalsentzer/Bio_ClinicalBERT
-      BATCH_SIZE: "32"
-      PORT: "8001"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
-      interval: 15s
-      timeout: 10s
-      retries: 8
-      start_period: 90s
-    deploy:
-      resources:
-        limits:
-          memory: 3g
-    logging: *default-logging
+  # ── Embedding Model Server: retired (ADR-012) ─────────────────────────────
+  # The local Docker "embedding-model" service (clinical-bert served from a
+  # container we built and ran) is gone. The clinical_bert embedding
+  # provider now runs on a Hugging Face Inference Endpoint instead — there
+  # is no container to run locally or in Compose for it. Provision it with
+  # `python scripts/deploy_hf_embedding_endpoint.py create`, then set
+  # HF_EMBEDDING_ENDPOINT_URL in .env. See ingestion/embedding-server/
+  # README.md and docs/adr/ADR-012-hf-hosted-clinical-bert-embedding-server.md.
 
   # ── Phase 4: Celery worker (doc-ingest queue) ─────────────────────────────
   celery-worker:
