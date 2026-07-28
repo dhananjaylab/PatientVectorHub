@@ -19,7 +19,10 @@ class RAGSettings(BaseSettings):
     WEAVIATE_URL: str = ""
     WEAVIATE_API_KEY: str = ""
     QDRANT_HOST: str = "localhost"
-    QDRANT_PORT: int = 6334
+    # 6333 = REST port (AsyncQdrantClient's port= kwarg); 6334 is gRPC, a
+    # separate kwarg this codebase doesn't use. Was 6334 (wrong) before
+    # Phase 6/ADR-013 — see vector-store/src/config.py for the full note.
+    QDRANT_PORT: int = 6333
     QDRANT_URL: str = ""
     QDRANT_API_KEY: str = ""
     EMBEDDING_PROVIDER: str = "openai"
