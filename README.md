@@ -131,6 +131,15 @@ HF_EMBEDDING_ENDPOINT_URL=https://YOUR-ENDPOINT.endpoints.huggingface.cloud
 CLINICAL_BERT_MODEL_ID=NeuML/pubmedbert-base-embeddings
 ```
 
+Alternatively, you can use the free, shared Serverless Inference API (which requires no credit card/billing on Hugging Face, but is subject to rate limits):
+
+```env
+EMBEDDING_PROVIDER=clinical_bert
+HF_TOKEN=YOUR_HF_TOKEN
+HF_EMBEDDING_ENDPOINT_URL=https://api-inference.huggingface.co/pipeline/feature-extraction/NeuML/pubmedbert-base-embeddings
+CLINICAL_BERT_MODEL_ID=NeuML/pubmedbert-base-embeddings
+```
+
 Vector schemas used by ingestion:
 
 ```powershell

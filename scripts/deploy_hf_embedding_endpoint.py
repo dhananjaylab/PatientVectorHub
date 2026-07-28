@@ -50,7 +50,7 @@ ACCELERATOR = os.getenv("HF_ENDPOINT_ACCELERATOR", "cpu")  # "cpu" | "gpu"
 VENDOR = os.getenv("HF_ENDPOINT_VENDOR", "aws")
 REGION = os.getenv("HF_ENDPOINT_REGION", "us-east-1")
 INSTANCE_TYPE = os.getenv(
-    "HF_ENDPOINT_INSTANCE_TYPE", "intel-icl" if ACCELERATOR == "cpu" else "nvidia-a10g"
+    "HF_ENDPOINT_INSTANCE_TYPE", "intel-spr" if ACCELERATOR == "cpu" else "nvidia-a10g"
 )
 INSTANCE_SIZE = os.getenv("HF_ENDPOINT_INSTANCE_SIZE", "x2")
 # min_replica=0 (default) means scale-to-zero: ~20-30s cold start on the
@@ -124,7 +124,7 @@ def create() -> None:
             instance_size=INSTANCE_SIZE,
             min_replica=MIN_REPLICA,
             max_replica=MAX_REPLICA,
-            type="protected",  # requires a bearer token on every request — not public
+            type="authenticated",  # requires a bearer token on every request — not public
             token=HF_TOKEN,
         )
     except Exception as exc:

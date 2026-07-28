@@ -89,7 +89,9 @@ class Settings(BaseSettings):
     # EMBEDDING_PROVIDER=clinical_bert and this is still blank, rather than
     # silently talking to nothing.
     HF_TOKEN: str = ""
-    HF_EMBEDDING_ENDPOINT_URL: str = ""
+    HF_EMBEDDING_ENDPOINT_URL: str = (
+        "https://api-inference.huggingface.co/pipeline/feature-extraction/NeuML/pubmedbert-base-embeddings"
+    )
     HF_EMBEDDING_ENDPOINT_NAME: str = "pvh-clinical-embeddings"
     CLINICAL_BERT_MODEL_ID: str = "NeuML/pubmedbert-base-embeddings"
     CLINICAL_BERT_DIMENSIONS: int = 768
