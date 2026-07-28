@@ -7,7 +7,7 @@ PatientVectorHub is a Windows-friendly, cloud-ready RAG platform for patient doc
 | Service | Folder | Purpose | Main dependencies |
 | :--- | :--- | :--- | :--- |
 | API Gateway | `api-gateway/` | FastAPI entrypoint, health/readiness routes, CORS, auth middleware, Alembic migrations | PostgreSQL, Keycloak, Kafka, Vault |
-| Ingestion | `ingestion/` | Document ingestion plumbing, tenant lookup helpers, OpenAI embedding flow, parser/chunker/worker modules | PostgreSQL, Kafka, embedding model, vector stores |
+| Ingestion | `ingestion/` | Document ingestion plumbing, tenant lookup helpers, embedding flow (OpenAI or Hugging Face-hosted clinical-bert), parser/chunker/worker modules | PostgreSQL, Kafka, vector stores |
 | RAG Engine | `rag-engine/` | Retrieval and LLM orchestration configuration for query flows | Redis, vector store, OpenAI embeddings, LLM providers |
 | Vector Store | `vector-store/` | Vector backend abstraction for Weaviate/Qdrant and retrieval storage contracts | Weaviate, Qdrant |
 
@@ -54,7 +54,7 @@ EMBEDDING_MODEL_VERSION=text-embedding-3-large
 
 ## Install Dependencies
 
-The repo supports separate virtual environments per service, which is the recommended setup for this project. The local embedding server has its own optional requirements file for future open-source embedding work; it is not needed for the current OpenAI embedding path.
+The repo supports separate virtual environments per service, which is the recommended setup for this project. The clinical embedding path (ADR-012) runs on a Hugging Face Inference Endpoint, not a local service — there's no separate venv or requirements file for it; `huggingface_hub` is part of `ingestion/requirements.txt`.
 
 ```powershell
 python -m venv venv-api-gateway
@@ -105,7 +105,7 @@ http://localhost:8000/docs
 
 ### Ingestion
 
-Use this service area for preparing ingestion data and ingestion infrastructure. The current embedding implementation uses OpenAI; the local open-source embedding server is kept as a future optional path.
+Use this service area for preparing ingestion data and ingestion infrastructure. Two embedding providers are available (`EMBEDDING_PROVIDER`): OpenAI (default, ADR-009) or a Hugging Face-hosted clinical-bert embedding endpoint (ADR-012). Neither runs as a local Docker service.
 
 Database seed data:
 
@@ -114,12 +114,21 @@ Database seed data:
 python -u scripts\seed_data.py
 ```
 
-OpenAI embedding configuration:
+OpenAI embedding configuration (default):
 
 ```env
 EMBEDDING_PROVIDER=openai
 EMBEDDING_MODEL_VERSION=text-embedding-3-large
 OPENAI_API_KEY=YOUR_KEY
+```
+
+Hugging Face-hosted clinical embedding configuration (ADR-012) — provision the endpoint once with `python scripts\deploy_hf_embedding_endpoint.py create`, then:
+
+```env
+EMBEDDING_PROVIDER=clinical_bert
+HF_TOKEN=YOUR_HF_TOKEN
+HF_EMBEDDING_ENDPOINT_URL=https://YOUR-ENDPOINT.endpoints.huggingface.cloud
+CLINICAL_BERT_MODEL_ID=NeuML/pubmedbert-base-embeddings
 ```
 
 Vector schemas used by ingestion:

@@ -57,7 +57,8 @@ dev:
 	@echo "  │  Keycloak → http://localhost:8443                │"
 	@echo "  │  Kafka    → localhost:9092                       │"
 	@echo "  │  Redis    → localhost:6379                       │"
-	@echo "  │  Embed    → http://localhost:8001                │"
+	@echo "  │  Embed    → Hugging Face Inference Endpoint       │"
+	@echo "  │             (see deploy_hf_embedding_endpoint.py) │"
 	@echo "  └─────────────────────────────────────────────────┘"
 	@echo.
 
@@ -70,7 +71,7 @@ dev-lite:
 	@$(MAKE) migrate
 	@$(MAKE) kafka-topics
 	@$(MAKE) seed
-	@echo "✅ Lite stack ready (Keycloak + Qdrant + Embedding skipped)"
+	@echo "✅ Lite stack ready (Keycloak + Qdrant skipped; Embedding is HF-hosted, not a local service — ADR-012)"
 
 stop:
 	docker compose down
