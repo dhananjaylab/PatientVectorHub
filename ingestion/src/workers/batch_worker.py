@@ -23,7 +23,7 @@ from .celery_app import celery_app
 from ..chunkers.splitter import RawChunk, chunk_text
 from ..config import settings
 from ..db.crud import mark_document_failed, update_document_embedding_status, update_job_progress
-from ..embeddings.openai_embedder import embed_batch
+from ..embeddings import embed_batch  # ADR-012: provider-dispatched (EMBEDDING_PROVIDER)
 from ..parsers import get_parser_for_uri
 from .dlq_producer import publish_to_dlq_sync
 
