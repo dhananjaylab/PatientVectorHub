@@ -27,7 +27,7 @@ class TestAppCreation:
 
     def test_app_has_routes(self):
         from src.main import app
-        route_paths = [r.path for r in app.routes]
+        route_paths = [r.path for r in app.routes if hasattr(r, "path")]
         assert "/health" in route_paths
         assert "/ready"  in route_paths
 
