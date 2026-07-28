@@ -86,7 +86,8 @@ function Start-Dev {
     Write-Host "  │  Keycloak → http://localhost:8443                │"
     Write-Host "  │  Kafka    → localhost:9092                       │"
     Write-Host "  │  Redis    → localhost:6379                       │"
-    Write-Host "  │  Embed    → http://localhost:8001                │"
+    Write-Host "  │  Embed    → Hugging Face Inference Endpoint       │"
+    Write-Host "  │             (see deploy_hf_embedding_endpoint.py) │"
     Write-Host "  └─────────────────────────────────────────────────┘"
     Write-Host ""
 }
@@ -100,7 +101,7 @@ function Start-Dev-Lite {
     Invoke-Migrate
     Invoke-Kafka-Topics
     Invoke-Seed
-    Write-Success "Lite stack ready (Keycloak + Qdrant + Embedding skipped)"
+    Write-Success "Lite stack ready (Keycloak + Qdrant skipped; Embedding is HF-hosted, not a local service — ADR-012)"
 }
 
 function Stop-Stack {

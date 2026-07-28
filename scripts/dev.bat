@@ -55,7 +55,7 @@ echo   Vault    - http://localhost:8200
 echo   Keycloak - http://localhost:8443
 echo   Kafka    - localhost:9092
 echo   Redis    - localhost:6379
-echo   Embed    - http://localhost:8001
+echo   Embed    - Hugging Face Inference Endpoint (see deploy_hf_embedding_endpoint.py)
 echo.
 goto :eof
 
