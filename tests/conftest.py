@@ -118,22 +118,34 @@ def mock_kafka():
 # ── FastAPI test client ───────────────────────────────────────────────────────
 @pytest.fixture
 def test_app(mock_vault, mock_kafka):
-    """FastAPI app with mocked state for unit tests."""
-    import sys, os
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "api-gateway"))
-    from src.main import app
+    """FastAPI app with mocked state for unit tests.
 
-    app.state.vault    = mock_vault
-    app.state.kafka    = mock_kafka
-    app.state.db_pool  = None   # DB tests use their own session fixture
-    return app
+    Patches AIOKafkaProducer so the lifespan handler never attempts a real
+    Kafka connection, and patches asyncpg.create_pool so the DB readiness
+    pool doesn't need a running Postgres instance.
+    """
+    import sys, os
+    from unittest.mock import AsyncMock, patch
+
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "api-gateway"))
+
+    mock_producer = AsyncMock()
+    mock_producer.start = AsyncMock()
+    mock_producer.stop = AsyncMock()
+    mock_producer.send_and_wait = AsyncMock()
+
+    with patch("src.main.AIOKafkaProducer", return_value=mock_producer):
+        from src.main import app
+        app.state.vault   = mock_vault
+        app.state.db_pool = None
+        yield app
 
 
 @pytest.fixture
 def client(test_app):
-    """Sync HTTPX test client."""
-    from httpx import Client, ASGITransport
-    with Client(transport=ASGITransport(app=test_app), base_url="http://testserver") as c:
+    """Sync TestClient."""
+    from fastapi.testclient import TestClient
+    with TestClient(test_app, base_url="http://testserver") as c:
         yield c
 
 
@@ -145,3 +157,62 @@ def async_client(test_app):
         transport=ASGITransport(app=test_app),
         base_url="http://testserver",
     )
+
+
+def pytest_runtest_setup(item):
+    """Clear cached 'src' modules AND fix sys.path so the correct subproject
+    is the *only* one present before every test.
+
+    Each test file does a module-level sys.path.insert(0, "<subproject>") that
+    only fires once during collection. Without this hook, whichever subproject
+    was inserted *last* during collection shadows all the others, and
+    sys.modules caching makes it even worse when different test files share
+    the 'src' package name across api-gateway, ingestion, and vector-store.
+
+    Strategy:
+    1. Flush every cached 'src' module from sys.modules.
+    2. Remove all three subproject roots from sys.path.
+    3. Re-insert the *correct* subproject root for the current test file by
+       reading its source for the `sys.path.insert(0, ...)` pattern.
+    """
+    import sys
+    import os
+    import re
+
+    # 1. Remove cached src modules
+    for k in list(sys.modules.keys()):
+        if k == "src" or k.startswith("src."):
+            del sys.modules[k]
+
+    # 2. Remove all subproject roots from sys.path
+    repo_root = os.path.normpath(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+    )
+    subproject_names = ("api-gateway", "ingestion", "vector-store")
+    subproject_dirs = {
+        os.path.normpath(os.path.join(repo_root, sp))
+        for sp in subproject_names
+    }
+    sys.path[:] = [
+        p for p in sys.path
+        if os.path.normpath(p) not in subproject_dirs
+    ]
+
+    # 3. Re-insert the correct subproject for *this* test file.
+    #    We inspect the test module's source for the sys.path.insert line
+    #    that names the subproject (e.g., "api-gateway", "ingestion", etc.).
+    test_file = str(item.fspath)
+    try:
+        with open(test_file, "r", encoding="utf-8") as f:
+            source = f.read(2048)  # Only need the top of the file
+    except OSError:
+        return
+
+    for sp in subproject_names:
+        # Match patterns like: os.path.join(..., "api-gateway")
+        # or os.path.join(..., "api-gateway"))
+        if f'"{sp}"' in source or f"'{sp}'" in source:
+            sys.path.insert(0, os.path.join(repo_root, sp))
+            break
+
+
