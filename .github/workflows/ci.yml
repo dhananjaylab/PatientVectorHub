@@ -75,6 +75,12 @@ jobs:
           # here are lightweight and network-free at import time.
           pip install boto3 pymupdf hl7 langchain-text-splitters openai tenacity \
             "celery[redis]" aiokafka
+          # Phase 5 addition: clinical_bert_embedder.py / embeddings provider
+          # dispatch tests (tests/unit/test_clinical_bert_embedder.py,
+          # test_embeddings_provider_routing.py) import huggingface_hub
+          # directly, same "fails to collect, not just fails" reasoning as
+          # weaviate-client/qdrant-client above (ADR-012).
+          pip install "huggingface_hub>=1.24.0,<1.25.0"
           # pydantic-settings and asyncpg were previously missing here even
           # though api-gateway/src/config.py (BaseSettings) and the Phase 2
           # db/session.py (create_async_engine against a postgresql+asyncpg
@@ -100,6 +106,7 @@ jobs:
           VAULT_TOKEN: dev-root-token
           AUTH_ENABLED: "false"
           OPENAI_API_KEY: sk-test-not-a-real-key
+          HF_TOKEN: hf_test-not-a-real-token
         run: |
           pytest tests/unit/ -v \
             --cov=api-gateway/src \
@@ -181,6 +188,21 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 12
+      # Phase 6 addition (ADR-013): Qdrant, so
+      # tests/integration/test_vector_store_layer.py can prove the
+      # dual-write path actually reaches a real Qdrant instance, not just
+      # a mocked one (tests/unit/test_dual_write_store.py covers the
+      # mocked policy).
+      qdrant:
+        image: qdrant/qdrant:v1.8.1
+        ports:
+          - 6333:6333
+          - 6334:6334
+        options: >-
+          --health-cmd "wget -qO- http://localhost:6333/healthz"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
 
     steps:
       - uses: actions/checkout@v4
@@ -199,7 +221,7 @@ jobs:
             python-dotenv
           # Phase 4: full ingestion stack for the end-to-end tests
           pip install boto3 pymupdf hl7 langchain-text-splitters openai tenacity \
-            "celery[redis]" weaviate-client psycopg2-binary
+            "celery[redis]" weaviate-client qdrant-client psycopg2-binary
 
       - name: Run Alembic migrations
         env:
@@ -216,6 +238,12 @@ jobs:
           WEAVIATE_HOST: localhost
           WEAVIATE_PORT: "8080"
         run: python scripts/setup_weaviate_schema.py
+
+      - name: Set up Qdrant collection (ADR-013)
+        env:
+          QDRANT_HOST: localhost
+          QDRANT_PORT: "6333"
+        run: python scripts/setup_qdrant_schema.py
 
       - name: Create Kafka topics
         env:
@@ -265,6 +293,8 @@ jobs:
           KAFKA_BROKERS: localhost:9092
           WEAVIATE_HOST: localhost
           WEAVIATE_PORT: "8080"
+          QDRANT_HOST: localhost
+          QDRANT_PORT: "6333"
           ENVIRONMENT: test
           # OPENAI_API_KEY intentionally NOT set here — the one test that
           # needs a real embedding call (test_ingestion_end_to_end.py)

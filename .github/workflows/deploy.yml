@@ -38,10 +38,12 @@ jobs:
         run: |
           docker build -t $ECR/pvh-api:$SHA     api-gateway/
           docker build -t $ECR/pvh-workers:$SHA  ingestion/
-          docker build -t $ECR/pvh-embedding:$SHA ingestion/embedding-server/
+          # pvh-embedding build/push removed (ADR-012) — the clinical
+          # embedding path now runs on a Hugging Face Inference Endpoint,
+          # provisioned separately via scripts/deploy_hf_embedding_endpoint.py.
+          # There is no image of ours to build for it anymore.
           docker push $ECR/pvh-api:$SHA
           docker push $ECR/pvh-workers:$SHA
-          docker push $ECR/pvh-embedding:$SHA
 
       - name: Update kubeconfig
         run: |
