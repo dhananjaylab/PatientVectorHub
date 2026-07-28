@@ -78,6 +78,18 @@ def _find_existing():
     return None
 
 
+def _format_creation_error(exc: Exception) -> str:
+    msg = str(exc)
+    if "payment method required" in msg.lower():
+        return (
+            f"ERROR: {msg}\n"
+            "       Hugging Face requires a valid payment method on file to create Inference Endpoints,\n"
+            "       even during free trial / low usage periods.\n"
+            "       Add a payment method at https://huggingface.co/settings/billing and try again."
+        )
+    return f"ERROR: {msg}"
+
+
 def create() -> None:
     from huggingface_hub import create_inference_endpoint
     from huggingface_hub.errors import InferenceEndpointTimeoutError
@@ -98,22 +110,26 @@ def create() -> None:
         f"min_replica={MIN_REPLICA} max_replica={MAX_REPLICA}"
     )
 
-    endpoint = create_inference_endpoint(
-        ENDPOINT_NAME,
-        namespace=HF_NAMESPACE,
-        repository=MODEL_ID,
-        framework="pytorch",
-        task="sentence-embeddings",  # TEI container — see ADR-012 §1/§2
-        accelerator=ACCELERATOR,
-        vendor=VENDOR,
-        region=REGION,
-        instance_type=INSTANCE_TYPE,
-        instance_size=INSTANCE_SIZE,
-        min_replica=MIN_REPLICA,
-        max_replica=MAX_REPLICA,
-        type="protected",  # requires a bearer token on every request — not public
-        token=HF_TOKEN,
-    )
+    try:
+        endpoint = create_inference_endpoint(
+            ENDPOINT_NAME,
+            namespace=HF_NAMESPACE,
+            repository=MODEL_ID,
+            framework="pytorch",
+            task="sentence-embeddings",  # TEI container — see ADR-012 §1/§2
+            accelerator=ACCELERATOR,
+            vendor=VENDOR,
+            region=REGION,
+            instance_type=INSTANCE_TYPE,
+            instance_size=INSTANCE_SIZE,
+            min_replica=MIN_REPLICA,
+            max_replica=MAX_REPLICA,
+            type="protected",  # requires a bearer token on every request — not public
+            token=HF_TOKEN,
+        )
+    except Exception as exc:
+        print(_format_creation_error(exc))
+        sys.exit(1)
 
     print("  Waiting for the endpoint to come online (can take a few minutes on first deploy)...")
     try:
