@@ -81,6 +81,16 @@ jobs:
           # directly, same "fails to collect, not just fails" reasoning as
           # weaviate-client/qdrant-client above (ADR-012).
           pip install "huggingface_hub>=1.24.0,<1.25.0"
+          # Phase 7 addition: rag-engine's llm_router.py / query_embedder.py
+          # unit tests (tests/unit/test_llm_router.py,
+          # test_query_embedder.py) import anthropic and google-genai
+          # directly for their exception types (e.g.
+          # retry_if_exception_type((RateLimitError, ...))), even though
+          # the actual clients are lazily constructed and mocked in every
+          # test — same "fails to collect, not just fails" class of
+          # problem as every other SDK on this list. See
+          # docs/adr/ADR-014-rag-query-engine.md.
+          pip install "anthropic>=0.120.0,<0.121.0" "google-genai>=2.14.0,<3.0.0"
           # pydantic-settings and asyncpg were previously missing here even
           # though api-gateway/src/config.py (BaseSettings) and the Phase 2
           # db/session.py (create_async_engine against a postgresql+asyncpg
@@ -107,6 +117,13 @@ jobs:
           AUTH_ENABLED: "false"
           OPENAI_API_KEY: sk-test-not-a-real-key
           HF_TOKEN: hf_test-not-a-real-token
+          # Phase 7: same "fake but present" pattern as OPENAI_API_KEY/
+          # HF_TOKEN above — llm_router.py's lazy client construction
+          # (_get_anthropic_client() etc.) must not crash at construction
+          # time even with a non-functional key; the actual retry/error
+          # tests mock the network call itself, not these env vars.
+          ANTHROPIC_API_KEY: sk-ant-test-not-a-real-key
+          GEMINI_API_KEY: test-not-a-real-gemini-key
         run: |
           pytest tests/unit/ -v \
             --cov=api-gateway/src \
@@ -222,6 +239,13 @@ jobs:
           # Phase 4: full ingestion stack for the end-to-end tests
           pip install boto3 pymupdf hl7 langchain-text-splitters openai tenacity \
             "celery[redis]" weaviate-client qdrant-client psycopg2-binary
+          # Phase 7: rag-engine's own deps, so
+          # tests/integration/test_rag_query_pipeline.py can be collected
+          # (it self-skips at runtime without a real ANTHROPIC_API_KEY —
+          # see that file's pytestmark — but still needs anthropic/
+          # google-genai/huggingface_hub importable to collect at all).
+          pip install "anthropic>=0.120.0,<0.121.0" "google-genai>=2.14.0,<3.0.0" \
+            "huggingface_hub>=1.24.0,<1.25.0"
 
       - name: Run Alembic migrations
         env:
@@ -296,11 +320,13 @@ jobs:
           QDRANT_HOST: localhost
           QDRANT_PORT: "6333"
           ENVIRONMENT: test
-          # OPENAI_API_KEY intentionally NOT set here — the one test that
-          # needs a real embedding call (test_ingestion_end_to_end.py)
-          # self-skips when it's absent (see that file's pytestmark). Set
-          # it as a repo secret if you want that specific test to run in
-          # CI; it will incur a small real OpenAI cost per run.
+          # OPENAI_API_KEY intentionally NOT set here — the tests that
+          # need a real embedding or LLM call (test_ingestion_end_to_end.py,
+          # and Phase 7's test_rag_query_pipeline.py) self-skip when it's
+          # absent (see each file's pytestmark). Set OPENAI_API_KEY /
+          # ANTHROPIC_API_KEY as repo secrets if you want those specific
+          # tests to run in CI; each will incur a small real API cost per
+          # run.
         run: |
           pytest tests/integration/ -v -m integration --tb=short -q
 
@@ -312,7 +338,12 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build API image
-        run: docker build -t pvh-api:${{ github.sha }} api-gateway/
+        # Phase 7 fix: context changed from api-gateway/ to repo root (.),
+        # matching ingestion's build below — api-gateway/Dockerfile now
+        # COPYs rag-engine/src/ and vector-store/src/ in alongside its own
+        # source (see that Dockerfile's header comment), which isn't
+        # reachable from a context scoped to api-gateway/ alone.
+        run: docker build -f api-gateway/Dockerfile -t pvh-api:${{ github.sha }} .
 
       - name: Trivy vulnerability scan
         uses: aquasecurity/trivy-action@master

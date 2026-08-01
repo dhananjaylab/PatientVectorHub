@@ -36,8 +36,22 @@ jobs:
           ECR: ${{ steps.ecr-login.outputs.registry }}
           SHA: ${{ github.sha }}
         run: |
-          docker build -t $ECR/pvh-api:$SHA     api-gateway/
-          docker build -t $ECR/pvh-workers:$SHA  ingestion/
+          # Phase 7 fix: both builds were still using their own service
+          # directory as context (api-gateway/, ingestion/) instead of the
+          # repo root — caught the same way the original deploy.yml
+          # build-context bug was caught in Phase 4 ("Validate against
+          # actual repo dumps"), by reading this file's actual current
+          # content rather than assuming an earlier fix had landed here.
+          # ingestion/Dockerfile has needed repo-root context since Phase 4
+          # (COPY vector-store/src/ ./vector_store/) and api-gateway/
+          # Dockerfile needs it as of Phase 7 (COPY rag-engine/src/ +
+          # vector-store/src/) — neither COPY source is reachable from a
+          # context scoped to the service's own subdirectory. CI's
+          # security-scan job (.github/workflows/ci.yml) already builds
+          # ingestion correctly this way; it just hadn't been carried over
+          # to this file.
+          docker build -f api-gateway/Dockerfile -t $ECR/pvh-api:$SHA .
+          docker build -f ingestion/Dockerfile -t $ECR/pvh-workers:$SHA .
           # pvh-embedding build/push removed (ADR-012) — the clinical
           # embedding path now runs on a Hugging Face Inference Endpoint,
           # provisioned separately via scripts/deploy_hf_embedding_endpoint.py.
