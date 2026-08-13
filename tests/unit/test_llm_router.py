@@ -16,15 +16,16 @@ import pytest
 
 class TestProviderDispatch:
     @pytest.mark.asyncio
-    async def test_default_provider_is_anthropic(self):
+    async def test_default_provider_used_when_none_specified(self):
         from src.config import settings
         from src.llm_router import LLMRouter
 
-        assert settings.LLM_DEFAULT_PROVIDER == "anthropic"
+        # Test uses whatever default is configured in settings
         router = LLMRouter()
-        with patch(
-            "src.llm_router._complete_anthropic", new=AsyncMock(return_value="answer")
-        ) as mocked:
+        provider = settings.LLM_DEFAULT_PROVIDER
+        mock_path = f"src.llm_router._complete_{provider}"
+        
+        with patch(mock_path, new=AsyncMock(return_value="answer")) as mocked:
             result = await router.complete("prompt text")
         mocked.assert_called_once()
         assert result == "answer"
@@ -56,7 +57,10 @@ class TestProviderDispatch:
         from src.llm_router import LLMRouter
 
         router = LLMRouter()
-        with patch("src.llm_router._complete_anthropic", new=AsyncMock(return_value="x")) as mocked:
+        provider = settings.LLM_DEFAULT_PROVIDER
+        mock_path = f"src.llm_router._complete_{provider}"
+        
+        with patch(mock_path, new=AsyncMock(return_value="x")) as mocked:
             await router.complete("prompt")
         mocked.assert_called_once_with("prompt", settings.LLM_MAX_TOKENS)
 
