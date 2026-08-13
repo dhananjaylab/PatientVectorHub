@@ -20,7 +20,16 @@ class TestDLQProducer:
     async def test_publish_to_dlq_sends_expected_payload(self):
         from src.workers.dlq_producer import publish_to_dlq
 
-        with patch("src.workers.dlq_producer.AIOKafkaProducer") as MockProducer:
+        # Mock kafka_client_kwargs to avoid SSL certificate loading during tests
+        with patch("src.workers.dlq_producer.kafka_client_kwargs") as mock_kafka_kwargs, \
+             patch("src.workers.dlq_producer.AIOKafkaProducer") as MockProducer:
+            
+            # Return minimal config without SSL
+            mock_kafka_kwargs.return_value = {
+                "bootstrap_servers": "localhost:9092",
+                "security_protocol": "PLAINTEXT"
+            }
+            
             instance = MockProducer.return_value
             instance.start = AsyncMock()
             instance.stop = AsyncMock()

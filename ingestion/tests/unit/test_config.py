@@ -20,19 +20,20 @@ def test_vector_backend_default():
     from src.config import settings
     assert settings.VECTOR_BACKEND in ("weaviate", "qdrant")
 
-def test_cors_origins_list_is_list():
+def test_embedding_provider_is_valid():
+    """Test that EMBEDDING_PROVIDER is set to a valid value."""
     from src.config import settings
-    result = settings.cors_origins_list
-    assert isinstance(result, list)
-    assert all(o.startswith("http") for o in result)
+    assert settings.EMBEDDING_PROVIDER in ("openai", "clinical_bert")
 
-def test_llm_max_tokens_positive():
+def test_embedding_dimensions_positive():
+    """Test that EMBEDDING_DIMENSIONS is a positive integer."""
     from src.config import settings
-    assert settings.LLM_MAX_TOKENS > 0
+    assert settings.EMBEDDING_DIMENSIONS > 0
 
-def test_api_port_valid():
+def test_kafka_brokers_configured():
+    """Test that Kafka brokers are configured."""
     from src.config import settings
-    assert 1024 <= settings.API_PORT <= 65535
+    assert len(settings.KAFKA_BROKERS) > 0
 
 def test_vector_cloud_settings():
     from src.config import settings
