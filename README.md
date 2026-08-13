@@ -16,7 +16,7 @@ Supporting components:
 | Component | Folder/File | Purpose |
 | :--- | :--- | :--- |
 | Dashboard | `dashboard/` | React/Vite frontend |
-| Infrastructure scripts | `scripts/` | Database seeding, vector schema setup, Kafka topic setup, local dev helpers |
+| Infrastructure scripts | `infra/scripts/`, `vector-store/scripts/`, `ingestion/scripts/`, `embedding-server/scripts/` | Database seeding, vector schema setup, Kafka topic setup, Hugging Face endpoint management |
 | Local infra | `docker-compose.yml`, `infra/` | Local PostgreSQL, Redis, Weaviate, Qdrant, Vault, Kafka, Keycloak |
 
 ## Configuration
@@ -43,7 +43,7 @@ EMBEDDING_PROVIDER=openai
 EMBEDDING_MODEL_VERSION=text-embedding-3-large
 ```
 
-`DATABASE_URL` is used by async application code and Alembic. `DATABASE_URL_SYNC` is used by synchronous scripts such as `scripts\seed_data.py`.
+`DATABASE_URL` is used by async application code and Alembic. `DATABASE_URL_SYNC` is used by synchronous scripts such as `infra\scripts\seed_data.py`.
 
 ## Prerequisites
 
@@ -111,7 +111,7 @@ Database seed data:
 
 ```powershell
 .\venv-api-gateway\Scripts\activate
-python -u scripts\seed_data.py
+python -u infra\scripts\seed_data.py
 ```
 
 OpenAI embedding configuration (default):
@@ -122,7 +122,7 @@ EMBEDDING_MODEL_VERSION=text-embedding-3-large
 OPENAI_API_KEY=YOUR_KEY
 ```
 
-Hugging Face-hosted clinical embedding configuration (ADR-012) — provision the endpoint once with `python scripts\deploy_hf_embedding_endpoint.py create`, then:
+Hugging Face-hosted clinical embedding configuration (ADR-012) — provision the endpoint once with `python embedding-server\scripts\deploy_hf_embedding_endpoint.py create`, then:
 
 ```env
 EMBEDDING_PROVIDER=clinical_bert
@@ -144,15 +144,15 @@ Vector schemas used by ingestion:
 
 ```powershell
 .\venv-vector-store\Scripts\activate
-python scripts\setup_weaviate_schema.py
-python scripts\setup_qdrant_schema.py
+python vector-store\scripts\setup_weaviate_schema.py
+python vector-store\scripts\setup_qdrant_schema.py
 ```
 
 Kafka topics used by ingestion:
 
 ```powershell
 .\venv-ingestion\Scripts\activate
-python scripts\create_kafka_topics.py
+python ingestion\scripts\create_kafka_topics.py
 ```
 
 ### Vector Store
@@ -161,8 +161,8 @@ Use this service for Weaviate/Qdrant backend contracts and collection setup. The
 
 ```powershell
 .\venv-vector-store\Scripts\activate
-python scripts\setup_weaviate_schema.py
-python scripts\setup_qdrant_schema.py
+python vector-store\scripts\setup_weaviate_schema.py
+python vector-store\scripts\setup_qdrant_schema.py
 ```
 
 Created collections:
@@ -193,16 +193,16 @@ For Aiven/cloud-backed development, run these from the repo root unless the comm
 cd api-gateway
 python -m alembic upgrade head
 cd ..
-python -u scripts\seed_data.py
+python -u infra\scripts\seed_data.py
 
 deactivate
 .\venv-vector-store\Scripts\activate
-python scripts\setup_weaviate_schema.py
-python scripts\setup_qdrant_schema.py
+python vector-store\scripts\setup_weaviate_schema.py
+python vector-store\scripts\setup_qdrant_schema.py
 
 deactivate
 .\venv-ingestion\Scripts\activate
-python scripts\create_kafka_topics.py
+python ingestion\scripts\create_kafka_topics.py
 ```
 
 Verify PostgreSQL seed data:
@@ -265,7 +265,7 @@ http://localhost:5173
 
 ## Test Credentials
 
-Synthetic users created by `scripts\seed_data.py`:
+Synthetic users created by `infra\scripts\seed_data.py`:
 
 | Email | Role | Tenant |
 | :--- | :--- | :--- |
@@ -298,7 +298,7 @@ Then rerun:
 
 ```powershell
 .\venv-api-gateway\Scripts\activate
-python -u scripts\seed_data.py
+python -u infra\scripts\seed_data.py
 ```
 
 ### Aiven Shows Only 100 Patients
@@ -320,7 +320,7 @@ This keeps local dev aligned with the actual repo layout and avoids the common `
 
 ### Kafka Cloud Authentication
 
-`KAFKA_BROKERS` and optional `KAFKA_SECURITY_PROTOCOL`, `KAFKA_USERNAME`, `KAFKA_PASSWORD`, `KAFKA_SASL_MECHANISM`, `KAFKA_SSL_CAFILE`, `KAFKA_SSL_CERTFILE`, and `KAFKA_SSL_KEYFILE` are loaded from `.env`. Aiven Kafka usually requires SSL/SASL or service certificates; copy those values from the Aiven console before running `scripts\create_kafka_topics.py`.
+`KAFKA_BROKERS` and optional `KAFKA_SECURITY_PROTOCOL`, `KAFKA_USERNAME`, `KAFKA_PASSWORD`, `KAFKA_SASL_MECHANISM`, `KAFKA_SSL_CAFILE`, `KAFKA_SSL_CERTFILE`, and `KAFKA_SSL_KEYFILE` are loaded from `.env`. Aiven Kafka usually requires SSL/SASL or service certificates; copy those values from the Aiven console before running `ingestion\scripts\create_kafka_topics.py`.
 
 ### Vector Store Cloud Authentication
 
@@ -343,7 +343,7 @@ New tenants are created automatically on first use (`auto_tenant_creation=True`)
 Use unbuffered output for long setup scripts:
 
 ```powershell
-python -u scripts\seed_data.py
+python -u infra\scripts\seed_data.py
 ```
 
 ### Docker Not Found
