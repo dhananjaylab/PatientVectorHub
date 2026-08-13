@@ -255,24 +255,24 @@ jobs:
       - name: Seed one tenant for ingestion tests
         env:
           DATABASE_URL_SYNC: postgresql+psycopg2://pvh:pvh_local@localhost:5432/pvh
-        run: python -u scripts/seed_data.py
+        run: python -u infra/scripts/seed_data.py
 
       - name: Set up Weaviate PatientDocument collection
         env:
           WEAVIATE_HOST: localhost
           WEAVIATE_PORT: "8080"
-        run: python scripts/setup_weaviate_schema.py
+        run: python vector-store/scripts/setup_weaviate_schema.py
 
       - name: Set up Qdrant collection (ADR-013)
         env:
           QDRANT_HOST: localhost
           QDRANT_PORT: "6333"
-        run: python scripts/setup_qdrant_schema.py
+        run: python vector-store/scripts/setup_qdrant_schema.py
 
       - name: Create Kafka topics
         env:
           KAFKA_BROKERS: localhost:9092
-        run: python scripts/create_kafka_topics.py
+        run: python ingestion/scripts/create_kafka_topics.py
 
       - name: Create RLS test role (non-superuser, exercises RLS policies)
         env:
