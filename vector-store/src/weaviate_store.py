@@ -14,17 +14,25 @@ search takes `query=` (BM25 text) and `vector=` (dense) together via
 `collection.query.hybrid(...)`; deletes go through
 `collection.data.delete_many(where=Filter...)`.
 
-Note: weaviate-client v4's sync API is called here from inside `async
-def` methods (matching the original doc 27 reference pattern) — the v4
-client does not offer a fully async surface for every operation, so this
-briefly blocks the event loop per call. Acceptable for Phase 4's
-ingestion-only write path and Phase 6's dual-write/search additions;
-revisit if/when Phase 7's query latency makes it worth wrapping in a
-thread executor.
+Phase 7 change: search() now runs the sync weaviate-client call via
+`asyncio.to_thread()` instead of calling it directly inline. This file's
+own Phase 6 docstring already flagged the reason: weaviate-client v4 has
+no fully async surface, so calling it directly from `async def` blocks
+the event loop for the call's full duration. That was an acceptable
+trade for Phase 4's Celery-only write path and Phase 6's dual-write
+addition (background workers, not interactively latency-sensitive), but
+Phase 7 puts this exact code on the hot path of every `/v1/query` HTTP
+request, where a blocked event loop stalls every other in-flight
+request on the same worker process. upsert()/delete()/health_check()
+are intentionally left as-is (still Celery/background-only call sites,
+already tested across Phases 4 and 6) — narrowing the fix to the one
+method that actually changed call sites, rather than touching
+already-verified code for no behavioral reason.
 """
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 
 import weaviate
@@ -88,7 +96,11 @@ class WeaviateStore(VectorStoreInterface):
         return self._client.is_ready()
 
     async def search(
-        self, query: str, query_vector: list[float], top_k: int = 10, filters: dict | None = None
+        self,
+        query: str,
+        query_vector: list[float],
+        top_k: int = 10,
+        filters: dict | None = None,
     ) -> list[SearchResult]:
         """Native hybrid search (BM25 + vector, Reciprocal Rank Fusion by
         default). The collection uses self-provided vectors (ADR-009 — no
@@ -100,16 +112,23 @@ class WeaviateStore(VectorStoreInterface):
         alpha=0.5 is Weaviate's own default (equal weight BM25/vector) —
         not tuned against PVH's actual corpus in this phase; revisit once
         Phase 7's RAG query engine has real queries to benchmark against.
+
+        Runs the underlying sync client call via asyncio.to_thread() —
+        see this module's docstring for why that changed in Phase 7.
         """
         wv_filter = _build_filter(filters)
-        response = self._tenant_collection.query.hybrid(
-            query=query,
-            vector=query_vector,
-            alpha=0.5,
-            limit=top_k,
-            filters=wv_filter,
-            return_metadata=MetadataQuery(score=True),
-        )
+
+        def _do_search():
+            return self._tenant_collection.query.hybrid(
+                query=query,
+                vector=query_vector,
+                alpha=0.5,
+                limit=top_k,
+                filters=wv_filter,
+                return_metadata=MetadataQuery(score=True),
+            )
+
+        response = await asyncio.to_thread(_do_search)
         return [
             SearchResult(
                 doc_id=o.properties["document_id"],
@@ -132,9 +151,10 @@ class WeaviateStore(VectorStoreInterface):
 
 def _build_filter(filters: dict | None):
     """Translate the interface's plain-dict filters into a Weaviate
-    Filter. Only document_types is used anywhere yet (no caller exists
-    before Phase 7) — extend here as real query needs show up rather than
-    guessing at a fuller filter DSL now."""
+    Filter. Only document_types is used anywhere yet — extend here as
+    real query needs show up rather than guessing at a fuller filter DSL
+    now (unchanged reasoning from Phase 6; Phase 7 is the first caller
+    but doesn't need more than this yet — see docs/adr/ADR-014 §2)."""
     if not filters:
         return None
     clauses = []

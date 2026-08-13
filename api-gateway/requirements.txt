@@ -27,7 +27,7 @@ httpx>=0.28.1,<0.29.0
 aiokafka>=0.12.0,<0.13.0
 
 # ── Secrets (Phase 10) ───────────────────────────────────────────────────────
-# hvac>=2.3.0,<2.4.0
+hvac>=2.3.0,<2.4.0
 
 # ── Observability (Phase 10) ─────────────────────────────────────────────────
 # prometheus-client>=0.21.0,<0.22.0
@@ -39,3 +39,14 @@ aiokafka>=0.12.0,<0.13.0
 
 # ── Utilities (Phase 4+) ─────────────────────────────────────────────────────
 tenacity>=9.0.0,<10.0.0
+
+# ── Testing dependencies ─────────────────────────────────────────────────────
+# Used by integration tests for connectivity checks
+redis>=5.0.0,<6.0.0
+weaviate-client>=4.0.0,<5.0.0
+
+# Test framework
+pytest>=8.0.0,<9.0.0
+pytest-asyncio>=0.21.0,<0.22.0
+pytest-cov>=4.1.0,<5.0.0
+httpx>=0.28.0,<0.29.0  # For async test client (already listed above but needed for tests)

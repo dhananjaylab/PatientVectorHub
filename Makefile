@@ -96,24 +96,24 @@ migration:
 
 seed:
 	@echo "▶ Seeding synthetic test data..."
-	$(PYTHON) scripts\seed_data.py
+	$(PYTHON) infra\scripts\seed_data.py
 	@echo "✅ Seed complete: 2 tenants, 4 users each, 1000 patients each"
 
 # ── Infrastructure Setup ──────────────────────────────────────────────────────
 setup-vector-stores:
 	@echo "▶ Creating Weaviate + Qdrant schemas for all tenants..."
-	$(PYTHON) scripts\setup_weaviate_schema.py
-	$(PYTHON) scripts\setup_qdrant_schema.py
+	$(PYTHON) vector-store\scripts\setup_weaviate_schema.py
+	$(PYTHON) vector-store\scripts\setup_qdrant_schema.py
 	@echo "✅ Vector store schemas created"
 
 kafka-topics:
 	@echo "▶ Creating Kafka topics..."
-	$(PYTHON) scripts\create_kafka_topics.py
+	$(PYTHON) ingestion\scripts\create_kafka_topics.py
 	@echo "✅ Kafka topics created"
 
 vault-init:
 	@echo "▶ Initialising Vault dev secrets..."
-	@powershell -Command "if (Test-Path 'C:\Program Files\Git\bin\bash.exe') { & 'C:\Program Files\Git\bin\bash.exe' scripts\vault_init.sh } else { Write-Host 'Note: vault_init.sh requires bash. Install Git for Windows or run: bash scripts/vault_init.sh' -ForegroundColor Yellow }"
+	@powershell -Command "if (Test-Path 'C:\\Program Files\\Git\\bin\\bash.exe') { & 'C:\\Program Files\\Git\\bin\\bash.exe' infra\\scripts\\vault_init.sh } else { Write-Host 'Note: vault_init.sh requires bash. Install Git for Windows or run: bash infra/scripts/vault_init.sh' -ForegroundColor Yellow }"
 	@echo "✅ Vault initialised"
 
 # ── Testing ───────────────────────────────────────────────────────────────────

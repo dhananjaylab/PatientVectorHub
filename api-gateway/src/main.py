@@ -7,6 +7,12 @@ Phase 2: DB session (db/session.py, db/crud.py), full core schema.
 Phase 3: Keycloak JWT + API-key middleware, RBAC guards, first protected
          router (admin — api keys, users).
 Phase 4: ingest router + Kafka producer.
+Phase 7: query router — see routers/query.py. Mounted the same phase it
+         was built, matching this file's own precedent for admin_router
+         (Phase 3) and ingest_router_module.router (Phase 4) — the
+         "Phase 8+ routers" comment that used to sit below bundled query
+         in with audit; audit genuinely is later-phase (compliance work),
+         query was not — see docs/adr/ADR-014-rag-query-engine.md.
 
 FIX (post-merge validation): the previous version of this file had TWO
 `yield` statements in `lifespan()` — one after starting the Kafka
@@ -25,6 +31,7 @@ shutdown runs after it, and the fix was re-verified by driving the same
 ASGI lifespan sequence and confirming `lifespan.shutdown.complete` with
 the cleanup code actually reached.
 """
+
 import logging
 import uuid
 from contextlib import asynccontextmanager
@@ -37,9 +44,10 @@ from fastapi.responses import JSONResponse
 from .config import settings
 from .errors import PVHError, pvh_exception_handler
 from .logging_config import configure_logging
+from .routers import ingest as ingest_router_module
+from .routers import query as query_router_module
 from .routers.admin import router as admin_router
 from .routers.health import router as health_router
-from .routers import ingest as ingest_router_module
 
 configure_logging(settings.LOG_LEVEL)
 
@@ -75,6 +83,7 @@ def _kafka_producer_kwargs() -> dict:
     # docstring for the concrete TypeError this avoids.
     if getattr(settings, "KAFKA_SSL_CAFILE", ""):
         from aiokafka.helpers import create_ssl_context
+
         kwargs["ssl_context"] = create_ssl_context(cafile=settings.KAFKA_SSL_CAFILE)
     return kwargs
 
@@ -94,9 +103,12 @@ async def lifespan(app: FastAPI):
     # need to exist per-request and can be a single small shared pool.
     try:
         import asyncpg
+
         app.state.db_pool = await asyncpg.create_pool(
             settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://"),
-            min_size=1, max_size=5, command_timeout=5,
+            min_size=1,
+            max_size=5,
+            command_timeout=5,
         )
         log.info("Postgres readiness pool ready")
     except Exception as e:
@@ -106,7 +118,7 @@ async def lifespan(app: FastAPI):
         log.warning("Postgres readiness pool unavailable at startup: %s", e)
         app.state.db_pool = None
 
-    app.state.vault = None   # Phase 10 (Security): hvac.Client
+    app.state.vault = None  # Phase 10 (Security): hvac.Client
 
     # Phase 4: Kafka producer, consumed by routers/ingest.py via
     # request.app.state.kafka.
@@ -116,7 +128,7 @@ async def lifespan(app: FastAPI):
 
     log.info("API Gateway ready", extra={"routes": len(app.routes)})
 
-    yield   # <-- single yield point; app serves requests while suspended here
+    yield  # <-- single yield point; app serves requests while suspended here
 
     log.info("Shutting down...")
     if getattr(app.state, "kafka", None):
@@ -124,6 +136,7 @@ async def lifespan(app: FastAPI):
     if getattr(app.state, "db_pool", None):
         await app.state.db_pool.close()
     from .db.session import dispose_engine
+
     await dispose_engine()
     log.info("Shutdown complete")
 
@@ -158,8 +171,12 @@ def create_app() -> FastAPI:
     @app.exception_handler(404)
     async def not_found(request: Request, exc) -> JSONResponse:
         return JSONResponse(
-            {"error": {"code": "NOT_FOUND",
-                       "message": f"{request.url.path} not found"}},
+            {
+                "error": {
+                    "code": "NOT_FOUND",
+                    "message": f"{request.url.path} not found",
+                }
+            },
             status_code=404,
         )
 
@@ -167,8 +184,12 @@ def create_app() -> FastAPI:
     async def internal(request: Request, exc) -> JSONResponse:
         log.error("Unhandled exception", extra={"path": str(request.url)})
         return JSONResponse(
-            {"error": {"code": "INTERNAL_ERROR",
-                       "message": "An unexpected error occurred"}},
+            {
+                "error": {
+                    "code": "INTERNAL_ERROR",
+                    "message": "An unexpected error occurred",
+                }
+            },
             status_code=500,
         )
 
@@ -193,10 +214,16 @@ def create_app() -> FastAPI:
             KeycloakJWTMiddleware,
             jwks_url=settings.KEYCLOAK_JWKS_URL,
             issuer=getattr(settings, "KEYCLOAK_ISSUER", None),
-            public_paths=frozenset({
-                "/health", "/ready", "/docs", "/redoc",
-                "/openapi.json", "/metrics",
-            }),
+            public_paths=frozenset(
+                {
+                    "/health",
+                    "/ready",
+                    "/docs",
+                    "/redoc",
+                    "/openapi.json",
+                    "/metrics",
+                }
+            ),
         )
 
     # Phase 10 (Security): AuditLogMiddleware uncomment when ready
@@ -207,11 +234,10 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(admin_router, prefix="/v1/admin", tags=["Admin"])
     app.include_router(ingest_router_module.router, prefix="/v1/ingest", tags=["Ingestion"])
+    app.include_router(query_router_module.router, prefix="/v1/query", tags=["Query"])
 
     # Phase 8+ routers (uncomment as phases complete):
-    # from .routers.query  import router as query_router
     # from .routers.audit  import router as audit_router
-    # app.include_router(query_router,  prefix="/v1/query",  tags=["Query"])
     # app.include_router(audit_router,  prefix="/v1/audit",  tags=["Audit"])
 
     return app
