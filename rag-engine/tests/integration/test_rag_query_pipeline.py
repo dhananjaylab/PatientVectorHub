@@ -7,6 +7,7 @@ messages.create() call shape/response parsing, and — end to end — a real
 embedded query actually retrieving a real Weaviate-stored chunk and
 getting synthesized into a cited answer.
 
+Scoped to `rag-engine` only for its own sys.path.insert (not mixing
 `rag-engine` + `vector-store` + `api-gateway` in one file's sys.path) —
 same reasoning docs/PHASE_6_IMPLEMENTATION_PLAN.md gives for
 test_vector_store_layer.py staying scoped to `vector-store` alone.
@@ -34,8 +35,11 @@ import pytest
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "rag-engine"))
+
 TENANT_ID = "00000000-0000-0000-0000-000000000001"  # seeded by scripts/seed_data.py
 FAKE_VECTOR_DIM = int(os.getenv("EMBEDDING_DIMENSIONS", "1536"))
+
 
 def _fake_vector(seed: int) -> list[float]:
     """Same deterministic, non-embedding vector helper as
@@ -44,6 +48,7 @@ def _fake_vector(seed: int) -> list[float]:
     + synthesis wiring and the Anthropic call shape, not embedding
     quality (already covered by ADR-009's tests)."""
     return [((seed + i) % 97) / 97.0 for i in range(FAKE_VECTOR_DIM)]
+
 
 @pytest.mark.integration
 @pytest.mark.skipif(
@@ -57,7 +62,7 @@ class TestRAGSynthesizerLive:
         parsing (message.content[0].text) against the real API — the
         one thing every mock-based unit test in test_llm_router.py and
         test_rag_synthesizer.py cannot prove by construction."""
-        from src.interface import SearchResult
+        from vector_store.interface import SearchResult
         from src.synthesizer import RAGSynthesizer
 
         chunks = [
@@ -89,6 +94,7 @@ class TestRAGSynthesizerLive:
         # error) actually works end to end.
         assert isinstance(result["citations"], list)
 
+
 @pytest.mark.integration
 @pytest.mark.skipif(
     not (os.getenv("ANTHROPIC_API_KEY") and os.getenv("OPENAI_API_KEY")),
@@ -104,10 +110,10 @@ class TestFullQueryPipelineLive:
         that exercises retriever.retrieve() at all — every other
         reference to it (test_retriever.py) mocks both embed_query() and
         get_store()."""
-        from src.interface import Chunk
+        from vector_store.interface import Chunk
         from src.retriever import retrieve
         from src.synthesizer import RAGSynthesizer
-        from src.weaviate_store import WeaviateStore
+        from vector_store.weaviate_store import WeaviateStore
 
         doc_id = str(uuid.uuid4())
         vector = _fake_vector(seed=42)
