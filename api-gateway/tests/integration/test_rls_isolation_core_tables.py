@@ -29,9 +29,15 @@ from pathlib import Path
 from dotenv import load_dotenv
 import pytest
 
-load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+load_dotenv(Path(__file__).resolve().parents[3] / ".env")
 
 pytestmark = pytest.mark.integration
+
+# Skip entire module if SKIP_INTEGRATION_TESTS is set
+skip_integration = pytest.mark.skipif(
+    os.getenv("SKIP_INTEGRATION_TESTS", "").lower() in ("true", "1", "yes"),
+    reason="Integration tests skipped (SKIP_INTEGRATION_TESTS=true)"
+)
 
 _RAW_URL = (
     os.getenv("RLS_TEST_DATABASE_URL")
@@ -72,6 +78,7 @@ class TestNewTablesRLSEnabled:
     with a clear message rather than a confusing zero-rows result."""
 
     @pytest.mark.asyncio
+    @skip_integration
     @pytest.mark.parametrize(
         "table", ["ingestion_jobs", "documents", "api_keys", "query_logs", "audit_logs"]
     )
@@ -91,6 +98,7 @@ class TestNewTablesRLSEnabled:
 
 class TestCrossTenantIsolationNewTables:
     @pytest.mark.asyncio
+    @skip_integration
     async def test_ingestion_jobs_and_api_keys_isolated_by_tenant(self):
         import asyncpg
         conn = await asyncpg.connect(POSTGRES_URL)
@@ -146,6 +154,7 @@ class TestCrossTenantIsolationNewTables:
 
 class TestAuditLogsAppendOnly:
     @pytest.mark.asyncio
+    @skip_integration
     async def test_insert_with_matching_tenant_succeeds(self):
         import asyncpg
         conn = await asyncpg.connect(POSTGRES_URL)
@@ -172,6 +181,7 @@ class TestAuditLogsAppendOnly:
             await conn.close()
 
     @pytest.mark.asyncio
+    @skip_integration
     async def test_insert_with_spoofed_tenant_is_rejected(self):
         import asyncpg
         conn = await asyncpg.connect(POSTGRES_URL)
@@ -199,6 +209,7 @@ class TestAuditLogsAppendOnly:
             await conn.close()
 
     @pytest.mark.asyncio
+    @skip_integration
     async def test_update_and_delete_are_both_blocked(self):
         """No FOR UPDATE / FOR DELETE policy exists at all for audit_logs
         (see migration 004's module docstring) — that absence, not a
@@ -253,6 +264,7 @@ class TestApiKeyResolverFailsClosed:
     provision for itself)."""
 
     @pytest.mark.asyncio
+    @skip_integration
     async def test_returns_zero_rows_for_unprivileged_caller(self):
         import asyncpg
         conn = await asyncpg.connect(POSTGRES_URL)

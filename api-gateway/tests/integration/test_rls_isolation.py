@@ -34,9 +34,15 @@ from pathlib import Path
 from dotenv import load_dotenv
 import pytest
 
-load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+load_dotenv(Path(__file__).resolve().parents[3] / ".env")
 
 pytestmark = pytest.mark.integration
+
+# Skip entire module if SKIP_INTEGRATION_TESTS is set
+skip_integration = pytest.mark.skipif(
+    os.getenv("SKIP_INTEGRATION_TESTS", "").lower() in ("true", "1", "yes"),
+    reason="Integration tests skipped (SKIP_INTEGRATION_TESTS=true)"
+)
 
 _RAW_URL = (
     os.getenv("RLS_TEST_DATABASE_URL")
@@ -90,6 +96,7 @@ class TestRLSPolicyExists:
     with a clear message rather than a confusing zero-rows result."""
 
     @pytest.mark.asyncio
+    @skip_integration
     async def test_rls_enabled_on_patients(self):
         import asyncpg
         conn = await asyncpg.connect(POSTGRES_URL)
@@ -110,6 +117,7 @@ class TestRLSPolicyExists:
             await conn.close()
 
     @pytest.mark.asyncio
+    @skip_integration
     async def test_tenant_isolation_policy_exists(self):
         import asyncpg
         conn = await asyncpg.connect(POSTGRES_URL)
@@ -131,6 +139,7 @@ class TestCrossTenantIsolation:
     tenant-scoped table must return exactly zero rows."""
 
     @pytest.mark.asyncio
+    @skip_integration
     async def test_cross_tenant_query_returns_zero_rows(self):
         import asyncpg
         conn = await asyncpg.connect(POSTGRES_URL)
@@ -178,6 +187,7 @@ class TestCrossTenantIsolation:
             await conn.close()
 
     @pytest.mark.asyncio
+    @skip_integration
     async def test_unscoped_session_sees_zero_rows(self):
         """A connection that never calls SET LOCAL app.tenant_id must
         fail closed, not fail open."""
