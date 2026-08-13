@@ -309,6 +309,15 @@ That is a UI preview limit. Run:
 SELECT COUNT(*) FROM patients;
 ```
 
+### API Gateway Startup Patch Fix
+
+Two local startup issues were patched for the API gateway when it is launched from the repo without installing every sibling package into the same virtualenv:
+
+1. `rag_engine` and `vector_store` are sibling service packages in this monorepo, not top-level installs in `venv-api-gateway`. The app now loads a project-local `sitecustomize` hook so those source directories are resolvable during `uvicorn src.main:app --reload`.
+2. Relative Kafka certificate paths such as `certs\ca.pem` in `.env` are now resolved from the repository root rather than the `api-gateway` directory, preventing `FileNotFoundError` during app startup.
+
+This keeps local dev aligned with the actual repo layout and avoids the common `ModuleNotFoundError: No module named 'rag_engine'` and certificate-path startup failures.
+
 ### Kafka Cloud Authentication
 
 `KAFKA_BROKERS` and optional `KAFKA_SECURITY_PROTOCOL`, `KAFKA_USERNAME`, `KAFKA_PASSWORD`, `KAFKA_SASL_MECHANISM`, `KAFKA_SSL_CAFILE`, `KAFKA_SSL_CERTFILE`, and `KAFKA_SSL_KEYFILE` are loaded from `.env`. Aiven Kafka usually requires SSL/SASL or service certificates; copy those values from the Aiven console before running `scripts\create_kafka_topics.py`.

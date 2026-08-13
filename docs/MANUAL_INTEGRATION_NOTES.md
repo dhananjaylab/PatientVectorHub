@@ -170,6 +170,40 @@ If you want the ADR-009 compliance guardrail described in
 
 ---
 
+## 5a. Local startup patch fix — `rag_engine` import path + Kafka SSL cert resolution
+
+This repo keeps `rag-engine/` and `vector-store/` as sibling service packages rather than
+installing them into the `venv-api-gateway` environment. That created a real local-dev startup
+failure when running:
+
+```powershell
+cd api-gateway
+uvicorn src.main:app --reload --port 8000
+```
+
+with the error:
+
+```text
+ModuleNotFoundError: No module named 'rag_engine'
+```
+
+The patch fix adds a project-local `sitecustomize` hook so the sibling source directories are
+made importable at startup without requiring a custom `sys.path` hack in every app entrypoint.
+This matches the repo's monorepo layout and keeps `from rag_engine.config import settings` and
+`from vector_store.interface import ...` working in local development.
+
+The second startup issue was a certificate lookup bug: `.env` uses relative values such as
+`certs\ca.pem`, but the app was resolving them relative to the `api-gateway` directory instead
+of the repo root. The fix resolves those paths against the repository root before creating the
+Kafka SSL context, preventing `FileNotFoundError` during app startup while still respecting the
+same `.env` values.
+
+This is a patch-level fix, not a packaging rewrite: it preserves the service-per-venv layout and
+makes the app boot correctly in the monorepo without forcing every consumer to install every
+sibling package into the same interpreter.
+
+---
+
 ## 6. R2 bucket — one real object needed for the load-test script only
 
 `scripts/load_test_ingestion.py` (the Phase 4 done-criteria smoke test) reuses a single real

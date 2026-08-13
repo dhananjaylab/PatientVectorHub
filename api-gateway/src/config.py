@@ -14,6 +14,7 @@ ingestion/src/config.py.
 """
 from pathlib import Path
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -122,6 +123,28 @@ class Settings(BaseSettings):
     @property
     def is_development(self) -> bool:
         return self.ENVIRONMENT in ("development", "dev")
+
+    @model_validator(mode="after")
+    def _resolve_ssl_paths(self):
+        """Resolve relative certificate paths against the repo root.
+
+        The project stores certs under the repo-level /certs folder, while
+        .env entries like `certs\ca.pem` are typically written relative to the
+        repository root rather than the API gateway subdirectory. Without this,
+        startup fails with FileNotFoundError even though the cert exists.
+        """
+        repo_root = Path(__file__).resolve().parents[2]
+        for field in ("KAFKA_SSL_CAFILE", "KAFKA_SSL_CERTFILE", "KAFKA_SSL_KEYFILE"):
+            value = getattr(self, field, "")
+            if not value:
+                continue
+            candidate = Path(value)
+            if candidate.is_absolute():
+                continue
+            resolved = (repo_root / candidate).resolve()
+            if resolved.exists():
+                setattr(self, field, str(resolved))
+        return self
 
 
 # Module-level singleton — import this everywhere
