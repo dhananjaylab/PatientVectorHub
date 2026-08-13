@@ -92,19 +92,32 @@ def test_app(mock_vault, mock_kafka):
     pool doesn't need a running Postgres instance.
     """
     import os
+    import ssl
     import sys
-    from unittest.mock import AsyncMock, patch
+    from unittest.mock import AsyncMock, MagicMock, patch
 
     mock_producer = AsyncMock()
     mock_producer.start = AsyncMock()
     mock_producer.stop = AsyncMock()
     mock_producer.send_and_wait = AsyncMock()
 
-    with patch("src.main.AIOKafkaProducer", return_value=mock_producer):
+    mock_db_pool = AsyncMock()
+    mock_db_pool.close = AsyncMock()
+    mock_db_pool.fetchval = AsyncMock(return_value=1)
+
+    # Mock SSL context creation to avoid file loading during tests
+    mock_ssl_context = MagicMock(spec=ssl.SSLContext)
+
+    # Patch AIOKafkaProducer, asyncpg.create_pool, and create_ssl_context
+    # to prevent real infrastructure connections during tests
+    with patch("src.main.AIOKafkaProducer", return_value=mock_producer), \
+         patch("asyncpg.create_pool", return_value=mock_db_pool), \
+         patch("aiokafka.helpers.create_ssl_context", return_value=mock_ssl_context):
         from src.main import app
 
         app.state.vault = mock_vault
-        app.state.db_pool = None
+        app.state.kafka = mock_producer
+        app.state.db_pool = mock_db_pool
         yield app
 
 

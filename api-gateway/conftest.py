@@ -54,7 +54,19 @@ def _ensure_cross_package_alias(target_src_dir: str, module_name: str) -> None:
         return
     module = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = module
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
+    except ImportError as e:
+        # If cross-package dependencies are missing, register a placeholder
+        # module so tests that don't need these packages can still run
+        import warnings
+        warnings.warn(
+            f"Could not import {module_name}: {e}. "
+            f"Tests requiring {module_name} will fail.",
+            ImportWarning
+        )
+        # Keep the empty module registered to avoid repeated import attempts
+        pass
 
 
 _here = os.path.dirname(os.path.abspath(__file__))
