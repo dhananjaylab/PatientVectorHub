@@ -1,4 +1,8 @@
-"""Pydantic request/response models for api-gateway/src/routers/admin.py."""
+"""Pydantic request/response models for api-gateway/src/routers/admin.py.
+
+Phase 8 addition: NamespaceHealthResponse, for the new
+GET /vector-store/namespaces endpoint (ADR-015).
+"""
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
@@ -44,3 +48,9 @@ class UserSummary(BaseModel):
 
 class UserListResponse(BaseModel):
     users: list[UserSummary]
+
+
+class NamespaceHealthResponse(BaseModel):
+    tenant_id: str
+    backend: str
+    healthy: bool
