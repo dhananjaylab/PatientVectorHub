@@ -7,7 +7,21 @@ except the small `tenants`-only and API-key-resolution functions explicitly
 marked otherwise below.
 
 Phase 4 addition: set_job_doc_count_total() — the only new function in
-this file. Everything else below is unchanged from the current repo.
+that phase's delivery of this file.
+
+Phase 8 changes (ADR-015):
+  - list_audit_logs() gained patient_id / from_ts / to_ts filters. doc 03's
+    UI/UX brief describes the Audit Trail page as filterable by "user,
+    patient ID, time range, action type" — only action/user_id were ever
+    wired up (Phase 4/6 shipped the function with just those two, unused
+    by any router until Phase 8's audit.py).
+  - list_ingestion_jobs() gained real offset pagination + a total count.
+    It was the only list endpoint in this codebase without either —
+    hardcoded to `LIMIT 100`, no `offset`, no total — while
+    list_audit_logs already had both since Phase 4/6. Return shape
+    changed from `list[dict]` to `{"jobs": [...], "total": N}`, matching
+    list_audit_logs's `{"logs": [...], "total": N}` shape. The only
+    caller (routers/ingest.py's list_jobs) is updated in this same phase.
 """
 from __future__ import annotations
 
@@ -220,19 +234,47 @@ async def get_ingestion_job(db: AsyncSession, job_id: str) -> dict | None:
     return {**dict(row), "progress_pct": pct}
 
 
-async def list_ingestion_jobs(db: AsyncSession, status: str | None = None) -> list[dict]:
-    where = "WHERE status = :status" if status else ""
+async def list_ingestion_jobs(
+    db: AsyncSession,
+    *,
+    status: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    """Phase 8 change (ADR-015): was `list_ingestion_jobs(db, status=None)
+    -> list[dict]`, hardcoded to `LIMIT 100` with no offset and no total
+    count — the only list endpoint in this codebase left without real
+    pagination (list_audit_logs already had limit/offset + total since
+    Phase 4/6, unused until Phase 8's audit router). Return shape changed
+    from a bare list to `{"jobs": [...], "total": N}`, matching
+    list_audit_logs's `{"logs": [...], "total": N}` shape — the one
+    caller, routers/ingest.py's list_jobs, is updated in this same phase
+    to build its response envelope from this new shape.
+    """
+    conditions = ["1=1"]
+    params: dict = {"lim": limit, "off": offset}
+    if status:
+        conditions.append("status = :status")
+        params["status"] = status
+    where = " AND ".join(conditions)
+
     rows = (
         await db.execute(
             text(
                 f"SELECT id, name, status, doc_count_total, doc_count_processed,"
-                f" doc_count_failed, created_at FROM ingestion_jobs {where}"
-                f" ORDER BY created_at DESC LIMIT 100"
+                f" doc_count_failed, created_at FROM ingestion_jobs WHERE {where}"
+                f" ORDER BY created_at DESC LIMIT :lim OFFSET :off"
             ),
-            {"status": status} if status else {},
+            params,
         )
     ).mappings().all()
-    return [dict(r) for r in rows]
+    total = (
+        await db.execute(
+            text(f"SELECT COUNT(*) FROM ingestion_jobs WHERE {where}"),
+            {k: v for k, v in params.items() if k not in ("lim", "off")},
+        )
+    ).scalar()
+    return {"jobs": [dict(r) for r in rows], "total": total}
 
 
 # ── Documents ────────────────────────────────────────────────────────────
@@ -314,9 +356,25 @@ async def list_audit_logs(
     *,
     action: str | None = None,
     user_id: str | None = None,
+    patient_id: str | None = None,
+    from_ts: str | None = None,
+    to_ts: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> dict:
+    """Phase 8 additions (ADR-015): patient_id / from_ts / to_ts filters.
+    doc 03's UI/UX brief describes the Audit Trail page as filterable by
+    "user, patient ID, time range, action type" — only action/user_id
+    were ever wired up (this function existed since Phase 4/6 but had no
+    router calling it until Phase 8's routers/audit.py).
+
+    from_ts/to_ts compare directly against the timestamptz created_at
+    column; callers pass ISO-8601 strings (see routers/audit.py's query
+    param validation) which Postgres compares correctly without an
+    explicit cast for any reasonable ISO-8601 input — same pattern this
+    function already used before this phase, just extended to two more
+    optional bounds instead of one.
+    """
     conditions = ["1=1"]
     params: dict = {"lim": limit, "off": offset}
     if action:
@@ -325,6 +383,15 @@ async def list_audit_logs(
     if user_id:
         conditions.append("user_id = :uid")
         params["uid"] = user_id
+    if patient_id:
+        conditions.append("patient_id = :pid")
+        params["pid"] = patient_id
+    if from_ts:
+        conditions.append("created_at >= :from_ts")
+        params["from_ts"] = from_ts
+    if to_ts:
+        conditions.append("created_at <= :to_ts")
+        params["to_ts"] = to_ts
     where = " AND ".join(conditions)
 
     rows = (
