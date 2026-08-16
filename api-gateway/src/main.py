@@ -13,6 +13,13 @@ Phase 7: query router — see routers/query.py. Mounted the same phase it
          "Phase 8+ routers" comment that used to sit below bundled query
          in with audit; audit genuinely is later-phase (compliance work),
          query was not — see docs/adr/ADR-014-rag-query-engine.md.
+Phase 8: audit router (routers/audit.py) mounted — this is the router
+         the "Phase 8+ routers" comment actually named. Also wires in
+         the in-process rate limiter (middleware/rate_limit.py) —
+         app.state.limiter and a RateLimitExceeded exception handler
+         producing this codebase's standard error envelope instead of
+         slowapi's own default plain-text 429 body. See
+         docs/adr/ADR-015-inprocess-rate-limiting-audit-admin-completion.md.
 
 FIX (post-merge validation): the previous version of this file had TWO
 `yield` statements in `lifespan()` — one after starting the Kafka
@@ -40,13 +47,16 @@ from aiokafka import AIOKafkaProducer
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
 
 from .config import settings
 from .errors import PVHError, pvh_exception_handler
 from .logging_config import configure_logging
+from .middleware.rate_limit import limiter, rate_limit_exceeded_handler
 from .routers import ingest as ingest_router_module
 from .routers import query as query_router_module
 from .routers.admin import router as admin_router
+from .routers.audit import router as audit_router
 from .routers.health import router as health_router
 
 configure_logging(settings.LOG_LEVEL)
@@ -165,6 +175,15 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # ── Rate limiting (Phase 8 / ADR-015) ───────────────────────────────────
+    # Static singleton, not per-request state — safe to set directly here
+    # rather than inside lifespan() (nothing about it needs an await or
+    # per-worker-process async setup, unlike the DB pool / Kafka producer
+    # above). Every @limiter.limit(...) decorator across routers/ingest.py,
+    # query.py, admin.py, and audit.py shares this one instance.
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)  # type: ignore
+
     # ── Exception handlers ────────────────────────────────────────────────────
     app.add_exception_handler(PVHError, pvh_exception_handler)  # type: ignore
 
@@ -235,10 +254,7 @@ def create_app() -> FastAPI:
     app.include_router(admin_router, prefix="/v1/admin", tags=["Admin"])
     app.include_router(ingest_router_module.router, prefix="/v1/ingest", tags=["Ingestion"])
     app.include_router(query_router_module.router, prefix="/v1/query", tags=["Query"])
-
-    # Phase 8+ routers (uncomment as phases complete):
-    # from .routers.audit  import router as audit_router
-    # app.include_router(audit_router,  prefix="/v1/audit",  tags=["Audit"])
+    app.include_router(audit_router, prefix="/v1/audit", tags=["Audit"])
 
     return app
 
