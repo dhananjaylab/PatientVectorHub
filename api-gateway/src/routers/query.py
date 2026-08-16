@@ -1,5 +1,6 @@
 """
-PatientVectorHub — RAG query route (Phase 7).
+PatientVectorHub — RAG query route (Phase 7; rate limit added Phase 8 /
+ADR-015).
 
 POST /v1/query is the first real caller of vector_store.interface.search()
 — ADR-013 §1 named Phase 7 as that caller when it added the required
@@ -24,6 +25,12 @@ cross-package shape ingestion/src/workers/batch_worker.py already has
 with vector_store since Phase 4. See MANUAL_INTEGRATION_NOTES.md for the
 Dockerfile / local-dev implications this adds for api-gateway
 specifically (it didn't need either package before this route existed).
+
+Phase 8 addition: `@limiter.limit("1000/minute")` (doc 09's exact value
+for this route) — needed a new `response: Response` param alongside the
+`request: Request` this route already had; see
+middleware/rate_limit.py's docstring for why the decorator requires both.
+Nothing else in this file's logic changed.
 """
 
 from __future__ import annotations
@@ -31,7 +38,7 @@ from __future__ import annotations
 import time
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from rag_engine.config import settings as rag_settings
 from rag_engine.retriever import retrieve
 from rag_engine.synthesizer import RAGSynthesizer
@@ -40,6 +47,7 @@ from starlette.requests import Request
 from ..db import crud
 from ..deps import get_current_user, get_db
 from ..errors import LLMError, QueryError
+from ..middleware.rate_limit import limiter
 from ..middleware.rbac import require_min_role
 from ..schemas.query import Citation, QueryRequest, QueryResponse, QueryResultItem
 
@@ -52,9 +60,11 @@ _synthesizer = RAGSynthesizer()
 
 
 @router.post("", response_model=QueryResponse, dependencies=[require_min_role("analyst")])
+@limiter.limit("1000/minute")  # doc 09: POST /v1/query — 1000/min
 async def rag_query(
     body: QueryRequest,
     request: Request,
+    response: Response,
     db=Depends(get_db),
     user=Depends(get_current_user),
 ) -> QueryResponse:

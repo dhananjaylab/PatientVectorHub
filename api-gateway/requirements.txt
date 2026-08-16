@@ -26,6 +26,17 @@ httpx>=0.28.1,<0.29.0
 # ── Messaging (Phase 4) ──────────────────────────────────────────────────────
 aiokafka>=0.12.0,<0.13.0
 
+# ── Rate limiting (Phase 8 / ADR-015) ────────────────────────────────────────
+# In-process, Redis-backed — confirmed decision over Kong Gateway OSS,
+# which needs its own Postgres/Cassandra + Redis + data-plane cluster
+# (contradicts ADR-009's pivot away from self-hosted infra). Reuses the
+# same REDIS_URL Celery already shares as broker + result backend — no
+# new redis client package needed, `redis>=5.0.0,<6.0.0` below already
+# covers the `limits` library's Redis storage backend (verified: builds
+# and connects fine against the plain `redis` package, no `limits[redis]`
+# extra required). See middleware/rate_limit.py.
+slowapi>=0.1.10,<0.2.0
+
 # ── Secrets (Phase 10) ───────────────────────────────────────────────────────
 hvac>=2.3.0,<2.4.0
 

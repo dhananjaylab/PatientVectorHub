@@ -7,6 +7,12 @@ Provides:
 - Mock auth credentials
 - Mock vault
 - Mock kafka
+
+Phase 8 addition: an autouse fixture that disables the process-wide rate
+limiter singleton (middleware/rate_limit.py) for every test. See that
+fixture's own docstring for why this has to be session-safe (the
+singleton and its storage backend persist across every test in the run,
+not per-test-app) rather than something each test file re-derives.
 """
 
 import asyncio
@@ -20,6 +26,37 @@ import pytest
 @pytest.fixture(scope="session")
 def event_loop_policy():
     return asyncio.DefaultEventLoopPolicy()
+
+
+# ── Rate limiter (Phase 8) ──────────────────────────────────────────────────
+@pytest.fixture(autouse=True)
+def _disable_rate_limiting():
+    """The module-level `limiter` singleton (middleware/rate_limit.py) is
+    shared process-wide, including across every test in this suite. Real
+    routes (ingest.py, query.py, admin.py, audit.py) are decorated with
+    @limiter.limit(...) at IMPORT time, so their rate-limit buckets
+    persist for the lifetime of the pytest process, not per-test or
+    per-app-instance. Without this, tests that call the same tightly
+    limited route repeatedly across many test functions in one run (e.g.
+    admin.py's create_key/revoke_key at 20/minute) would eventually start
+    failing with unrelated 429s purely from test-suite volume, not from
+    anything the test itself is checking.
+
+    Verified directly (Phase 8 sandbox notes): `enabled=False` fully
+    bypasses checking without even incrementing the underlying counter,
+    and flipping back to True later resumes counting from whatever was
+    already stored — so this must be set for the whole test run, not
+    toggled per test. tests/unit/test_rate_limit.py deliberately
+    re-enables the real flag for its own isolated toy routes/limiter
+    instances to verify actual enforcement, and restores False
+    afterward.
+    """
+    from src.middleware.rate_limit import limiter
+
+    original = limiter.enabled
+    limiter.enabled = False
+    yield
+    limiter.enabled = original
 
 
 # ── Test constants ─────────────────────────────────────────────────────────────
