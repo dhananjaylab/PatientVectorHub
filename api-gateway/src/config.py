@@ -11,6 +11,16 @@ matching env vars were being silently dropped rather than attached to
 `settings` — meaning SASL/SSL auth could never actually engage no matter
 what was set in .env. Mirrors the same fields already added to
 ingestion/src/config.py.
+
+Phase 8 addition: RATE_LIMIT_ENABLED — gates
+middleware/rate_limit.py's Limiter(enabled=...). Defaults True in every
+real environment; test fixtures explicitly set this False (or monkeypatch
+the module-level `limiter.enabled` directly — see
+middleware/rate_limit.py's own docstring) so existing and new unit tests
+that hit the same route repeatedly within one test run don't trip real
+limits and produce flaky, unrelated 429s. No new Redis setting was added
+for the limiter's storage backend — it reuses REDIS_URL, already shared
+by Celery's broker/result backend (see middleware/rate_limit.py).
 """
 from pathlib import Path
 
@@ -110,6 +120,9 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = (
         "http://localhost:5173,http://localhost:3000,https://app.pvh.internal"
     )
+
+    # ── Rate limiting (Phase 8 / ADR-015) ────────────────────────────────────
+    RATE_LIMIT_ENABLED: bool = True
 
     @property
     def cors_origins_list(self) -> list[str]:
