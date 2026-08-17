@@ -91,6 +91,13 @@ jobs:
           # problem as every other SDK on this list. See
           # docs/adr/ADR-014-rag-query-engine.md.
           pip install "anthropic>=0.120.0,<0.121.0" "google-genai>=2.14.0,<3.0.0"
+          # Phase 8 addition: slowapi -- src.middleware.rate_limit
+          # (ADR-015) is imported by main.py and every rate-limited
+          # router (ingest, query, admin, audit), so EVERY api-gateway
+          # unit test file now fails to *collect* without it, not just
+          # the new Phase 8 test files -- same "fails to collect, not
+          # just fails" class of problem as every other SDK on this list.
+          pip install "slowapi>=0.1.10,<0.2.0"
           # pydantic-settings and asyncpg were previously missing here even
           # though api-gateway/src/config.py (BaseSettings) and the Phase 2
           # db/session.py (create_async_engine against a postgresql+asyncpg
@@ -246,6 +253,8 @@ jobs:
           # google-genai/huggingface_hub importable to collect at all).
           pip install "anthropic>=0.120.0,<0.121.0" "google-genai>=2.14.0,<3.0.0" \
             "huggingface_hub>=1.24.0,<1.25.0"
+          # Phase 8 addition: same reason as test-unit above.
+          pip install "slowapi>=0.1.10,<0.2.0"
 
       - name: Run Alembic migrations
         env:
