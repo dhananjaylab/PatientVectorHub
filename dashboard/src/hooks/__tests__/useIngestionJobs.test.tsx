@@ -98,6 +98,7 @@ describe('useJobDetail', () => {
   })
 
   it('does not fire when jobId is undefined (enabled: false)', () => {
+    vi.mocked(api.get).mockClear()
     renderHook(() => useJobDetail(undefined), { wrapper })
     expect(api.get).not.toHaveBeenCalled()
   })
