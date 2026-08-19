@@ -38,17 +38,75 @@ jobs:
           mypy api-gateway/src ingestion/src rag-engine/src vector-store/src \
             --ignore-missing-imports
 
+      # Phase 9: bumped 20 -> 22. react-router@8 (dashboard/package.json)
+      # hard-requires Node >=22.22.0 -- `npm ci` fails dependency
+      # resolution outright on Node 20, not just a warning. Vite 7's own
+      # floor (^20.19 || >=22.12) would tolerate 20, but react-router's is
+      # the stricter constraint that actually governs here.
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: dashboard/package-lock.json
 
+      # Phase 9: `--ext .ts,.tsx` was a legacy (pre-v9) ESLint CLI flag
+      # tied to the old .eslintrc.* config-resolution system -- there was
+      # never actually a .eslintrc.* file in this repo for it to resolve
+      # against (this ESLint step has been running against whatever
+      # ESLint's own fallback behavior was, not a real project config,
+      # since Phase 1). dashboard/eslint.config.js (new this phase) is
+      # flat config, which discovers files via its own `files` glob
+      # patterns -- `--ext` is simply not part of that system's CLI
+      # surface. `npm ci` also replaces the ad-hoc `npm ci --prefer-offline`
+      # invocation with the package.json-declared `lint` script, so this
+      # step and a local `npm run lint` can never silently drift apart.
       - name: ESLint
         working-directory: dashboard
         run: |
           npm ci --prefer-offline
-          npx eslint src/ --ext .ts,.tsx --max-warnings 0
+          npm run lint
+
+  dashboard-test:
+    name: Dashboard (typecheck + vitest + build)
+    runs-on: ubuntu-latest
+    # New in Phase 9. Deliberately separate from the `lint` job above
+    # (fast ESLint feedback) the same way test-unit is separate from
+    # lint for the Python side -- typecheck/vitest/build is the heavier,
+    # slower path. Does NOT run the Playwright e2e suite: those specs
+    # need the full docker-compose stack (Postgres/Redis/Keycloak/Kafka/
+    # Weaviate) running, which is real CI infrastructure work of its own
+    # -- see docs/PHASE_9_IMPLEMENTATION_PLAN.md §7. `npm run test` here
+    # is Vitest only, fully backend-independent (every hook/component
+    # test mocks src/lib/api.ts directly).
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Install deps
+        working-directory: dashboard
+        run: npm ci --prefer-offline
+
+      - name: Typecheck
+        working-directory: dashboard
+        run: npm run typecheck
+
+      - name: Unit tests (Vitest)
+        working-directory: dashboard
+        run: npm run test
+
+      - name: Production build
+        working-directory: dashboard
+        run: npm run build
+        env:
+          # Matches .env.example's local-dev default -- CI isn't running
+          # against a real Keycloak, so the build must not require one.
+          VITE_API_BASE_URL: /v1
+          VITE_AUTH_ENABLED: "false"
 
   test-unit:
     name: Unit Tests
@@ -87,7 +145,7 @@ jobs:
           # directly for their exception types (e.g.
           # retry_if_exception_type((RateLimitError, ...))), even though
           # the actual clients are lazily constructed and mocked in every
-          # test — same "fails to collect, not just fails" class of
+          # test -- same "fails to collect, not just fails" class of
           # problem as every other SDK on this list. See
           # docs/adr/ADR-014-rag-query-engine.md.
           pip install "anthropic>=0.120.0,<0.121.0" "google-genai>=2.14.0,<3.0.0"
@@ -101,7 +159,7 @@ jobs:
           # pydantic-settings and asyncpg were previously missing here even
           # though api-gateway/src/config.py (BaseSettings) and the Phase 2
           # db/session.py (create_async_engine against a postgresql+asyncpg
-          # URL) both need them at import time — without them, any test
+          # URL) both need them at import time -- without them, any test
           # importing src.config or src.db.session fails to *collect*,
           # which fails the whole pytest run, not just the affected tests.
           # Same reasoning applies to weaviate-client/qdrant-client below
@@ -125,7 +183,7 @@ jobs:
           OPENAI_API_KEY: sk-test-not-a-real-key
           HF_TOKEN: hf_test-not-a-real-token
           # Phase 7: same "fake but present" pattern as OPENAI_API_KEY/
-          # HF_TOKEN above — llm_router.py's lazy client construction
+          # HF_TOKEN above -- llm_router.py's lazy client construction
           # (_get_anthropic_client() etc.) must not crash at construction
           # time even with a non-functional key; the actual retry/error
           # tests mock the network call itself, not these env vars.
@@ -170,7 +228,7 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 10
-      # Phase 4 addition: Kafka (KRaft, single broker — mirrors
+      # Phase 4 addition: Kafka (KRaft, single broker -- mirrors
       # docker-compose.yml's local dev config) so
       # tests/integration/test_ingestion_end_to_end.py and
       # test_ingestion_dlq_end_to_end.py have a real doc-ingest /
@@ -248,8 +306,8 @@ jobs:
             "celery[redis]" weaviate-client qdrant-client psycopg2-binary
           # Phase 7: rag-engine's own deps, so
           # tests/integration/test_rag_query_pipeline.py can be collected
-          # (it self-skips at runtime without a real ANTHROPIC_API_KEY —
-          # see that file's pytestmark — but still needs anthropic/
+          # (it self-skips at runtime without a real ANTHROPIC_API_KEY --
+          # see that file's pytestmark -- but still needs anthropic/
           # google-genai/huggingface_hub importable to collect at all).
           pip install "anthropic>=0.120.0,<0.121.0" "google-genai>=2.14.0,<3.0.0" \
             "huggingface_hub>=1.24.0,<1.25.0"
@@ -329,7 +387,7 @@ jobs:
           QDRANT_HOST: localhost
           QDRANT_PORT: "6333"
           ENVIRONMENT: test
-          # OPENAI_API_KEY intentionally NOT set here — the tests that
+          # OPENAI_API_KEY intentionally NOT set here -- the tests that
           # need a real embedding or LLM call (test_ingestion_end_to_end.py,
           # and Phase 7's test_rag_query_pipeline.py) self-skip when it's
           # absent (see each file's pytestmark). Set OPENAI_API_KEY /
@@ -348,7 +406,7 @@ jobs:
 
       - name: Build API image
         # Phase 7 fix: context changed from api-gateway/ to repo root (.),
-        # matching ingestion's build below — api-gateway/Dockerfile now
+        # matching ingestion's build below -- api-gateway/Dockerfile now
         # COPYs rag-engine/src/ and vector-store/src/ in alongside its own
         # source (see that Dockerfile's header comment), which isn't
         # reachable from a context scoped to api-gateway/ alone.
