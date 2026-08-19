@@ -20,8 +20,15 @@
  */
 import axios from 'axios';
 import { getValidToken, logout } from './keycloak';
+
+// In Node.js environments (e.g. Playwright tests), import.meta.env is undefined.
+// Default to safe values for API base URL.
+const getEnv = (key, defaultValue = '') => {
+    return import.meta?.env?.[key] ?? defaultValue;
+};
+
 export const api = axios.create({
-    baseURL: import.meta.env.VITE_API_BASE_URL || '/v1',
+    baseURL: getEnv('VITE_API_BASE_URL', '/v1'),
     timeout: 30_000,
 });
 api.interceptors.request.use(async (config) => {
