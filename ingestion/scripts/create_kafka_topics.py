@@ -7,16 +7,26 @@ import time
 
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 KAFKA_BROKERS = os.getenv("KAFKA_BROKERS", "localhost:9092")
 KAFKA_SECURITY_PROTOCOL = os.getenv("KAFKA_SECURITY_PROTOCOL", "PLAINTEXT")
 KAFKA_USERNAME = os.getenv("KAFKA_USERNAME", "")
 KAFKA_PASSWORD = os.getenv("KAFKA_PASSWORD", "")
 KAFKA_SASL_MECHANISM = os.getenv("KAFKA_SASL_MECHANISM", "PLAIN")
+
+# Resolve relative paths to project root
+_project_root = Path(__file__).resolve().parents[2]
 KAFKA_SSL_CAFILE = os.getenv("KAFKA_SSL_CAFILE", "")
 KAFKA_SSL_CERTFILE = os.getenv("KAFKA_SSL_CERTFILE", "")
 KAFKA_SSL_KEYFILE = os.getenv("KAFKA_SSL_KEYFILE", "")
+
+if KAFKA_SSL_CAFILE and not Path(KAFKA_SSL_CAFILE).is_absolute():
+    KAFKA_SSL_CAFILE = str(_project_root / KAFKA_SSL_CAFILE)
+if KAFKA_SSL_CERTFILE and not Path(KAFKA_SSL_CERTFILE).is_absolute():
+    KAFKA_SSL_CERTFILE = str(_project_root / KAFKA_SSL_CERTFILE)
+if KAFKA_SSL_KEYFILE and not Path(KAFKA_SSL_KEYFILE).is_absolute():
+    KAFKA_SSL_KEYFILE = str(_project_root / KAFKA_SSL_KEYFILE)
 
 DEFAULT_PARTITIONS = int(os.getenv("KAFKA_TOPIC_PARTITIONS", "2"))
 DLQ_PARTITIONS = int(os.getenv("KAFKA_DLQ_PARTITIONS", str(DEFAULT_PARTITIONS)))

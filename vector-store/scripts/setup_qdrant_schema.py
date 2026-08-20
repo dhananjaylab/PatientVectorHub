@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
 # 6333 = REST port (QdrantClient's `port=` kwarg). 6334 is gRPC — a

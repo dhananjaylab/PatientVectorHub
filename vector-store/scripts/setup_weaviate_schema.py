@@ -25,7 +25,7 @@ except ImportError:  # pragma: no cover - handled gracefully at runtime
     Property = None
     VectorDistances = None
 
-load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 
 WEAVIATE_HOST = os.getenv("WEAVIATE_HOST", "localhost")
