@@ -70,7 +70,7 @@ function normalizeDetail(row) {
  * per-job detail view (2s — see useJobDetail below) since a list of many
  * jobs is a heavier query than a single-row lookup. */
 export function useIngestionJobs(params = {}) {
-    const { status, limit = 20, offset = 0 } = params;
+    const { status, limit = 20, offset = 0, enabled = true } = params;
     return useQuery({
         queryKey: ['ingestion-jobs', status, limit, offset],
         queryFn: async () => {
@@ -78,6 +78,7 @@ export function useIngestionJobs(params = {}) {
             return { jobs: data.jobs.map(normalizeListRow), total: data.total, limit: data.limit, offset: data.offset };
         },
         refetchInterval: 5_000,
+        enabled,
     });
 }
 /** Polls a single job's authoritative detail every 2s — this is the

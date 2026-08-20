@@ -25,34 +25,11 @@
  * and isn't needed for this flow.
  */
 import Keycloak from 'keycloak-js';
-
-// In Node.js environments (e.g. Playwright tests), import.meta.env is undefined.
-// Default to safe values that disable auth and prevent Keycloak init.
-const getEnv = (key, defaultValue = '') => {
-    return import.meta?.env?.[key] ?? defaultValue;
-};
-
-const AUTH_ENABLED = getEnv('VITE_AUTH_ENABLED', 'false') === 'true';
-
-// Lazy-initialize Keycloak only when accessed, avoiding 'document is not defined'
-// errors in Node.js test environments.
-let keycloakInstance = null;
-export function getKeycloak() {
-    if (!keycloakInstance) {
-        keycloakInstance = new Keycloak({
-            url: getEnv('VITE_KEYCLOAK_URL', 'http://localhost:8443'),
-            realm: getEnv('VITE_KEYCLOAK_REALM', 'patientvectorhub'),
-            clientId: getEnv('VITE_KEYCLOAK_CLIENT_ID', 'pvh-spa'),
-        });
-    }
-    return keycloakInstance;
-}
-
-// For backward compatibility, provide keycloak as a property getter
-export const keycloak = new Proxy({}, {
-    get(target, prop) {
-        return getKeycloak()[prop];
-    }
+const AUTH_ENABLED = import.meta.env.VITE_AUTH_ENABLED === 'true';
+export const keycloak = new Keycloak({
+    url: import.meta.env.VITE_KEYCLOAK_URL,
+    realm: import.meta.env.VITE_KEYCLOAK_REALM,
+    clientId: import.meta.env.VITE_KEYCLOAK_CLIENT_ID,
 });
 /**
  * Initializes Keycloak and returns whether the session is authenticated.
@@ -70,7 +47,7 @@ export async function initKeycloak() {
     if (!AUTH_ENABLED) {
         return false;
     }
-    return getKeycloak().init({
+    return keycloak.init({
         onLoad: 'login-required',
         pkceMethod: 'S256',
         checkLoginIframe: false,
@@ -89,22 +66,22 @@ export async function initKeycloak() {
  * behavior of not requiring a credential at all.
  */
 export async function getValidToken() {
-    if (!AUTH_ENABLED || !getKeycloak().authenticated) {
+    if (!AUTH_ENABLED || !keycloak.authenticated) {
         return null;
     }
     try {
-        await getKeycloak().updateToken(30);
+        await keycloak.updateToken(30);
     }
     catch {
         // Refresh failed (e.g. refresh token itself expired) — fall through
         // and let the 401 interceptor in lib/api.ts redirect to login rather
         // than silently sending a stale/invalid token.
     }
-    return getKeycloak().token ?? null;
+    return keycloak.token ?? null;
 }
 export function logout() {
     if (AUTH_ENABLED) {
-        void getKeycloak().logout({ redirectUri: window.location.origin });
+        void keycloak.logout({ redirectUri: window.location.origin });
     }
 }
 export const isAuthEnabled = AUTH_ENABLED;
