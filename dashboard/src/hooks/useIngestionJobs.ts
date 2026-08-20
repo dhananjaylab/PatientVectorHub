@@ -138,6 +138,7 @@ export interface UseIngestionJobsParams {
   status?: JobStatus
   limit?: number
   offset?: number
+  enabled?: boolean
 }
 
 /** Lists ingestion jobs. Polls every 5s so the list page shows live status
@@ -145,7 +146,7 @@ export interface UseIngestionJobsParams {
  * per-job detail view (2s — see useJobDetail below) since a list of many
  * jobs is a heavier query than a single-row lookup. */
 export function useIngestionJobs(params: UseIngestionJobsParams = {}) {
-  const { status, limit = 20, offset = 0 } = params
+  const { status, limit = 20, offset = 0, enabled = true } = params
   return useQuery<IngestionJobsPage>({
     queryKey: ['ingestion-jobs', status, limit, offset],
     queryFn: async () => {
@@ -156,6 +157,7 @@ export function useIngestionJobs(params: UseIngestionJobsParams = {}) {
       return { jobs: data.jobs.map(normalizeListRow), total: data.total, limit: data.limit, offset: data.offset }
     },
     refetchInterval: 5_000,
+    enabled,
   })
 }
 

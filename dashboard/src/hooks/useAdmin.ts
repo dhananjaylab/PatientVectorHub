@@ -116,7 +116,7 @@ export interface NamespaceHealth {
  * Vector Store Health page reflects the real current state without a
  * manual refresh, but not so aggressively that it adds meaningful load
  * to Weaviate/Qdrant's health_check() call. */
-export function useNamespaceHealth() {
+export function useNamespaceHealth(enabled = true) {
   return useQuery<NamespaceHealth>({
     queryKey: ['admin-namespace-health'],
     queryFn: async () => {
@@ -124,5 +124,6 @@ export function useNamespaceHealth() {
       return data
     },
     refetchInterval: 15_000,
+    enabled,
   })
 }

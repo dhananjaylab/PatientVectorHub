@@ -19,8 +19,8 @@ import { StatusBadge } from '../components/common/StatusBadge'
 export function DashboardPage() {
   const { role } = useAuthStore()
   const canSeeIngestion = hasMinRole(role, 'engineer')
-  const { data: jobsPage } = useIngestionJobs({ limit: 5 })
-  const { data: health } = useNamespaceHealth()
+  const { data: jobsPage } = useIngestionJobs({ limit: 5, enabled: canSeeIngestion })
+  const { data: health } = useNamespaceHealth(canSeeIngestion)
 
   const running = jobsPage?.jobs.filter((j) => j.status === 'running' || j.status === 'queued') ?? []
 
