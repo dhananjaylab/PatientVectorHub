@@ -18,12 +18,14 @@ runtime — see MANUAL_INTEGRATION_NOTES.md for exactly what that requires
 """
 import asyncio
 import logging
+import time
 
 from .celery_app import celery_app
 from ..chunkers.splitter import RawChunk, chunk_text
 from ..config import settings
 from ..db.crud import mark_document_failed, update_document_embedding_status, update_job_progress
 from ..embeddings import embed_batch  # ADR-012: provider-dispatched (EMBEDDING_PROVIDER)
+from ..observability import document_processing_duration_seconds, documents_processed_total
 from ..parsers import get_parser_for_uri
 from .dlq_producer import publish_to_dlq_sync
 
@@ -63,6 +65,7 @@ def process_document(
     chunk_size: int = 512,
     chunk_overlap: int = 50,
 ) -> None:
+    start = time.perf_counter()
     try:
         update_document_embedding_status(tenant_id, doc_id, "processing")
 
@@ -85,6 +88,15 @@ def process_document(
         update_job_progress(tenant_id, job_id, increment=1)
         log.info("processed doc_id=%s job_id=%s chunks=%d", doc_id, job_id, len(chunks))
 
+        # Only on the genuinely-completed path — a retry isn't a
+        # terminal outcome yet, so it's deliberately not counted here
+        # (see the terminal-failure branch below for the other half of
+        # this counter's two possible label values).
+        documents_processed_total.labels(status="completed", document_type=document_type).inc()
+        document_processing_duration_seconds.labels(document_type=document_type).observe(
+            time.perf_counter() - start
+        )
+
     except Exception as exc:
         log.error(
             "process_document failed doc_id=%s attempt=%d/%d: %s",
@@ -103,5 +115,11 @@ def process_document(
                 error=str(exc),
             )
             mark_document_failed(tenant_id, doc_id, job_id, str(exc))
+            documents_processed_total.labels(
+                status="failed", document_type=document_type
+            ).inc()
+            document_processing_duration_seconds.labels(document_type=document_type).observe(
+                time.perf_counter() - start
+            )
             return
         raise self.retry(exc=exc)

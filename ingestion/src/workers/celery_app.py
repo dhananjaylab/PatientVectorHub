@@ -22,6 +22,7 @@ registered yet just logs "Received unregistered task" every tick.
 """
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import worker_init, worker_process_shutdown
 
 from ..config import settings
 
@@ -44,6 +45,39 @@ celery_app.conf.beat_schedule = {
         "schedule": crontab(minute="*/15"),
     },
 }
+
+# Phase 10 (Observability & Security) / ADR-017: metrics + tracing setup.
+# worker_init fires once in the PARENT process before any child is
+# forked (celery-worker runs `-c 4` — see observability.py's own
+# docstring for why that specific process needs the multiprocess-aware
+# path rather than a plain start_http_server call).
+worker_init.connect(lambda **kwargs: _configure_observability(**kwargs))
+worker_process_shutdown.connect(
+    lambda **kwargs: _observability_module().celery_worker_process_shutdown(**kwargs)
+)
+
+
+def _observability_module():
+    # Imported lazily, inside the signal handler, not at module top —
+    # this file's own docstring already explains why batch_worker and
+    # scheduled_tasks are imported at the bottom, for task-registration
+    # ordering; observability.py has no such circular constraint, but
+    # importing it lazily here keeps celery_app.py's own top import
+    # block free of a Phase 10-specific dependency for anyone who
+    # only needs `celery_app` itself (e.g. a future lightweight
+    # health-check script that just wants to inspect
+    # celery_app.conf without pulling in prometheus_client/opentelemetry
+    # at all).
+    from .. import observability
+
+    return observability
+
+
+def _configure_observability(**kwargs) -> None:
+    obs = _observability_module()
+    obs.celery_worker_init(**kwargs)
+    obs.configure_tracing()
+
 
 # Import task-defining modules for their side effect of registering
 # @celery_app.task functions — see the module docstring above.
