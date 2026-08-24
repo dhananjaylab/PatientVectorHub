@@ -21,6 +21,26 @@ that hit the same route repeatedly within one test run don't trip real
 limits and produce flaky, unrelated 429s. No new Redis setting was added
 for the limiter's storage backend — it reuses REDIS_URL, already shared
 by Celery's broker/result backend (see middleware/rate_limit.py).
+
+Phase 10 additions (Observability & Security):
+- VAULT_TRANSIT_KEY — matches infra/scripts/vault_init.sh's already-
+  seeded "phi-key" Transit key name; kept configurable rather than
+  hardcoded in vault_client.py so a differently-named prod key doesn't
+  require a code change.
+- METRICS_ENABLED / TRACING_ENABLED — same "declared, not implied"
+  posture as RATE_LIMIT_ENABLED: both default True, both exist so a
+  single env var can turn either off (e.g. tracing off in a constrained
+  local dev environment with no Jaeger running) without code changes.
+- PROMETHEUS_MULTIPROC_DIR — empty by default (single-process dev
+  server: uvicorn's own in-memory CollectorRegistry is correct there).
+  MUST be set to a writable, EMPTY-ON-BOOT directory whenever
+  API_WORKERS > 1 (gunicorn/uvicorn multi-worker prod deployment) — the
+  default prometheus_client registry silently produces wrong (per-
+  worker, not aggregated) numbers across processes without this. See
+  observability.py's docstring for the concrete mechanism.
+- PHI_CACHE_TTL_SECONDS — the risk register's own prescribed mitigation
+  ("cache Vault-encrypted MRN values in Redis (1h TTL)"), not a value
+  invented for this phase.
 """
 from pathlib import Path
 
@@ -79,6 +99,18 @@ class Settings(BaseSettings):
     VAULT_ADDR: str = "http://localhost:8200"
     VAULT_TOKEN: str = "dev-root-token"
     # Production: VAULT_TOKEN unused — K8s ServiceAccount auth via Vault agent
+    VAULT_TRANSIT_KEY: str = "phi-key"
+
+    # ── PHI guardrail (Phase 10 / ADR-017) ──────────────────────────────────
+    # Mirrors ingestion/src/config.py's own ALLOW_REAL_PHI, same name and
+    # default, so one env var means the same thing across every service.
+    # Gates vault_client.require_vault_or_fail_closed(), called from
+    # lifespan() — when real PHI is in play, a Vault outage or a missing
+    # phi-key transit key must abort startup, not silently boot into a
+    # state that would let PHI persist unencrypted (fail-closed, matching
+    # ADR-010's RLS posture, deliberately not middleware/rate_limit.py's
+    # fail-open one — see vault_client.py's module docstring).
+    ALLOW_REAL_PHI: bool = False
 
     # -- Auth ---------------------------------------------------------------------
     AUTH_ENABLED: bool = False
@@ -109,10 +141,15 @@ class Settings(BaseSettings):
     R2_DOCUMENT_BUCKET: str = "pvh-documents-dev"
     R2_BACKUP_BUCKET: str = "pvh-backups-dev"
 
-    # ── Observability ─────────────────────────────────────────────────────────
+    # ── Observability (Phase 10) ─────────────────────────────────────────────
     JAEGER_ENDPOINT: str = "http://localhost:4317"
     LOG_LEVEL: str = "INFO"
     ENVIRONMENT: str = "development"
+    METRICS_ENABLED: bool = True
+    TRACING_ENABLED: bool = True
+    OTEL_SERVICE_NAME: str = "pvh-api-gateway"
+    PROMETHEUS_MULTIPROC_DIR: str = ""
+    PHI_CACHE_TTL_SECONDS: int = 3600
 
     # ── App ───────────────────────────────────────────────────────────────────
     API_HOST: str = "0.0.0.0"
