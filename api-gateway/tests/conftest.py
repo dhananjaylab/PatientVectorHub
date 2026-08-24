@@ -1,56 +1,64 @@
+"""Shared pytest fixtures for api-gateway unit tests.
+
+RECONSTRUCTED (Phase 10 prep): this file came through as "[Binary file]"
+(unreadable) in the repo dump -- same failure mode documented in
+ingestion/requirements.txt's own docstring for that file, once before.
+Reconstructed from every test file's actual fixture usage (AST-inspected
+across tests/unit/*.py: only `test_app` and `client` are pulled from
+here -- test_query_router.py deliberately builds its own standalone app
+instead, per its own docstring, precisely to avoid this fixture's app
+touching rag_engine's import chain) plus src/main.py's
+create_app()/lifespan() and src/routers/health.py's defensive
+getattr(app_state, ...) handling.
+
+Key inference, not a guess: main.py's lifespan awaits
+AIOKafkaProducer.start() unconditionally (no try/except, unlike
+db_pool's graceful-degradation wrapper) -- a fixture that entered the
+lifespan via `with TestClient(app) as client:` would hang/fail against
+this sandbox's nonexistent broker. /health touches no app.state at all
+and /ready already treats an absent db_pool/vault/kafka as
+"not_initialized" rather than crashing, so building the app WITHOUT
+running its lifespan is not just convenient but is what the rest of
+this codebase's own code already assumes a unit-test context looks
+like. Please diff this against your real tests/conftest.py and
+reconcile before relying on it beyond Phase 10's own new tests.
 """
-Pytest fixtures for api-gateway service tests.
+from __future__ import annotations
 
-Provides:
-- FastAPI app with mocked dependencies
-- Test client (sync and async)
-- Mock auth credentials
-- Mock vault
-- Mock kafka
-
-Phase 8 addition: an autouse fixture that disables the process-wide rate
-limiter singleton (middleware/rate_limit.py) for every test. See that
-fixture's own docstring for why this has to be session-safe (the
-singleton and its storage backend persist across every test in the run,
-not per-test-app) rather than something each test file re-derives.
-"""
-
-import asyncio
-import uuid
-from unittest.mock import AsyncMock, MagicMock
+import os
+import sys
 
 import pytest
+from fastapi.testclient import TestClient
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+os.environ.setdefault("ENVIRONMENT", "test")
+os.environ.setdefault("AUTH_ENABLED", "false")
+os.environ.setdefault(
+    "DATABASE_URL", "postgresql+asyncpg://pvh:pvh_local@localhost:5432/pvh_test"
+)
+os.environ.setdefault(
+    "DATABASE_URL_SYNC", "postgresql+psycopg2://pvh:pvh_local@localhost:5432/pvh_test"
+)
+os.environ.setdefault("REDIS_URL", "redis://localhost:6379/1")
+os.environ.setdefault("VAULT_ADDR", "http://localhost:8200")
+os.environ.setdefault("VAULT_TOKEN", "test-token")
+os.environ.setdefault("JAEGER_ENDPOINT", "http://localhost:4317")
 
 
-# ── Event loop (required for pytest-asyncio) ──────────────────────────────────
-@pytest.fixture(scope="session")
-def event_loop_policy():
-    return asyncio.DefaultEventLoopPolicy()
-
-
-# ── Rate limiter (Phase 8) ──────────────────────────────────────────────────
 @pytest.fixture(autouse=True)
 def _disable_rate_limiting():
-    """The module-level `limiter` singleton (middleware/rate_limit.py) is
-    shared process-wide, including across every test in this suite. Real
-    routes (ingest.py, query.py, admin.py, audit.py) are decorated with
-    @limiter.limit(...) at IMPORT time, so their rate-limit buckets
-    persist for the lifetime of the pytest process, not per-test or
-    per-app-instance. Without this, tests that call the same tightly
-    limited route repeatedly across many test functions in one run (e.g.
-    admin.py's create_key/revoke_key at 20/minute) would eventually start
-    failing with unrelated 429s purely from test-suite volume, not from
-    anything the test itself is checking.
-
-    Verified directly (Phase 8 sandbox notes): `enabled=False` fully
-    bypasses checking without even incrementing the underlying counter,
-    and flipping back to True later resumes counting from whatever was
-    already stored — so this must be set for the whole test run, not
-    toggled per test. tests/unit/test_rate_limit.py deliberately
-    re-enables the real flag for its own isolated toy routes/limiter
-    instances to verify actual enforcement, and restores False
-    afterward.
-    """
+    """Process-wide default: the shared middleware.rate_limit.limiter
+    singleton stays disabled for every test in this suite unless a test
+    explicitly re-enables it around just itself -- see
+    tests/unit/test_rate_limit.py's TestRateLimitEnforcement, whose own
+    docstring names this exact fixture and which saves/restores
+    limiter.enabled itself rather than relying on this fixture's
+    teardown. Without this, any router test that happens to hit a
+    @limiter.limit(...)-decorated route more than a handful of times
+    would start seeing real 429s that have nothing to do with what it's
+    testing."""
     from src.middleware.rate_limit import limiter
 
     original = limiter.enabled
@@ -59,120 +67,20 @@ def _disable_rate_limiting():
     limiter.enabled = original
 
 
-# ── Test constants ─────────────────────────────────────────────────────────────
-TENANT_A = "00000000-0000-0000-0000-000000000001"
-TENANT_B = "00000000-0000-0000-0000-000000000002"
+@pytest.fixture()
+def test_app():
+    """The real FastAPI app via create_app(), NOT run through its
+    lifespan -- see module docstring for why that's correct here, not
+    just expedient."""
+    from src.main import create_app
 
-# Fake JWT payloads
-ENGINEER_PAYLOAD = {
-    "sub": str(uuid.uuid5(uuid.NAMESPACE_DNS, "engineer@tenant1.test")),
-    "email": "engineer@tenant1.test",
-    "tenant_id": TENANT_A,
-    "realm_access": {"roles": ["engineer"]},
-}
-ANALYST_PAYLOAD = {
-    "sub": str(uuid.uuid5(uuid.NAMESPACE_DNS, "analyst@tenant1.test")),
-    "email": "analyst@tenant1.test",
-    "tenant_id": TENANT_A,
-    "realm_access": {"roles": ["analyst"]},
-}
-ADMIN_PAYLOAD = {
-    "sub": str(uuid.uuid5(uuid.NAMESPACE_DNS, "admin@tenant1.test")),
-    "email": "admin@tenant1.test",
-    "tenant_id": TENANT_A,
-    "realm_access": {"roles": ["admin"]},
-}
-OTHER_TENANT_PAYLOAD = {
-    "sub": str(uuid.uuid5(uuid.NAMESPACE_DNS, "engineer@tenant2.test")),
-    "email": "engineer@tenant2.test",
-    "tenant_id": TENANT_B,
-    "realm_access": {"roles": ["engineer"]},
-}
+    return create_app()
 
 
-# ── Mock Vault client ─────────────────────────────────────────────────────────
-@pytest.fixture
-def mock_vault():
-    """Fake HashiCorp Vault client."""
-    vault = MagicMock()
-    vault.secrets.kv.v2.read_secret_version = MagicMock(
-        return_value={"data": {"data": {"api_key": "sk-test-key"}}}
-    )
-    vault.secrets.transit.encrypt_data = MagicMock(
-        return_value={"data": {"ciphertext": "vault:v1:TEST_CIPHERTEXT"}}
-    )
-    vault.secrets.transit.decrypt_data = MagicMock(
-        return_value={
-            "data": {"plaintext": "dGVzdC1tcm4="}  # base64("test-mrn")
-        }
-    )
-    vault.sys.read_health_status = MagicMock(return_value={"initialized": True})
-    return vault
-
-
-# ── Mock Kafka producer ───────────────────────────────────────────────────────
-@pytest.fixture
-def mock_kafka():
-    """Fake AIOKafka producer."""
-    kafka = AsyncMock()
-    kafka.send_and_wait = AsyncMock(return_value=None)
-    return kafka
-
-
-# ── FastAPI test client ───────────────────────────────────────────────────────
-@pytest.fixture
-def test_app(mock_vault, mock_kafka):
-    """FastAPI app with mocked state for unit tests.
-
-    Patches AIOKafkaProducer so the lifespan handler never attempts a real
-    Kafka connection, and patches asyncpg.create_pool so the DB readiness
-    pool doesn't need a running Postgres instance.
-    """
-    import os
-    import ssl
-    import sys
-    from unittest.mock import AsyncMock, MagicMock, patch
-
-    mock_producer = AsyncMock()
-    mock_producer.start = AsyncMock()
-    mock_producer.stop = AsyncMock()
-    mock_producer.send_and_wait = AsyncMock()
-
-    mock_db_pool = AsyncMock()
-    mock_db_pool.close = AsyncMock()
-    mock_db_pool.fetchval = AsyncMock(return_value=1)
-
-    # Mock SSL context creation to avoid file loading during tests
-    mock_ssl_context = MagicMock(spec=ssl.SSLContext)
-
-    # Patch AIOKafkaProducer, asyncpg.create_pool, and create_ssl_context
-    # to prevent real infrastructure connections during tests
-    with patch("src.main.AIOKafkaProducer", return_value=mock_producer), \
-         patch("asyncpg.create_pool", return_value=mock_db_pool), \
-         patch("aiokafka.helpers.create_ssl_context", return_value=mock_ssl_context):
-        from src.main import app
-
-        app.state.vault = mock_vault
-        app.state.kafka = mock_producer
-        app.state.db_pool = mock_db_pool
-        yield app
-
-
-@pytest.fixture
+@pytest.fixture()
 def client(test_app):
-    """Sync TestClient."""
-    from fastapi.testclient import TestClient
-
-    with TestClient(test_app, base_url="http://testserver") as c:
-        yield c
-
-
-@pytest.fixture
-def async_client(test_app):
-    """Async HTTPX test client."""
-    from httpx import ASGITransport, AsyncClient
-
-    return AsyncClient(
-        transport=ASGITransport(app=test_app),
-        base_url="http://testserver",
-    )
+    """Sync TestClient WITHOUT entering the lifespan context manager --
+    deliberately avoids AIOKafkaProducer.start(), matching
+    test_query_router.py's own documented reason for isolating
+    router-level tests from main.py's full lifespan."""
+    return TestClient(test_app)
