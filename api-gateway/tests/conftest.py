@@ -41,7 +41,7 @@ os.environ.setdefault(
 os.environ.setdefault(
     "DATABASE_URL_SYNC", "postgresql+psycopg2://pvh:pvh_local@localhost:5432/pvh_test"
 )
-os.environ.setdefault("REDIS_URL", "redis://localhost:6379/1")
+os.environ.setdefault("REDIS_URL", "redis://default:NIgWB05hohJ4ipvSF5HfKKaNmmTfm7NR@redis-10789.c241.us-east-1-4.ec2.cloud.redislabs.com:10789")
 os.environ.setdefault("VAULT_ADDR", "http://localhost:8200")
 os.environ.setdefault("VAULT_TOKEN", "test-token")
 os.environ.setdefault("JAEGER_ENDPOINT", "http://localhost:4317")
