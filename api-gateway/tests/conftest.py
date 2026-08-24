@@ -27,11 +27,15 @@ from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 
 import pytest
+from dotenv import load_dotenv
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 os.environ.setdefault("ENVIRONMENT", "test")
 os.environ.setdefault("AUTH_ENABLED", "false")
@@ -41,7 +45,7 @@ os.environ.setdefault(
 os.environ.setdefault(
     "DATABASE_URL_SYNC", "postgresql+psycopg2://pvh:pvh_local@localhost:5432/pvh_test"
 )
-os.environ.setdefault("REDIS_URL", "redis://default:NIgWB05hohJ4ipvSF5HfKKaNmmTfm7NR@redis-10789.c241.us-east-1-4.ec2.cloud.redislabs.com:10789")
+os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ.setdefault("VAULT_ADDR", "http://localhost:8200")
 os.environ.setdefault("VAULT_TOKEN", "test-token")
 os.environ.setdefault("JAEGER_ENDPOINT", "http://localhost:4317")
