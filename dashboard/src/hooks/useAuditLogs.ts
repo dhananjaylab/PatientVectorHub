@@ -48,6 +48,11 @@ export const AUDIT_ACTIONS = [
   'api_key_create',
   'api_key_revoke',
   'data_export',
+  // Phase 10 / ADR-017: migration 005 added this to the backend's
+  // action CHECK constraint; AuditLogMiddleware writes it for 403 RBAC
+  // denials (never bare 401s -- see that middleware's own docstring for
+  // the RLS-driven reason).
+  'access_denied',
 ] as const
 export type AuditAction = (typeof AUDIT_ACTIONS)[number]
 
@@ -110,6 +115,28 @@ export function useExportAuditLogs() {
       link.click()
       link.remove()
       URL.revokeObjectURL(url)
+    },
+  })
+}
+
+/**
+ * Phase 10 / ADR-017. Closes the gap Phase 9's own ADR-016 flagged by
+ * name: `.phi-cell`'s hover-to-reveal was purely a CSS effect with no
+ * audit trail, because Phase 9 didn't own backend scope. Same
+ * require_min_role("auditor") floor as useAuditLogs above — a caller
+ * can only ever reveal a patient_id they already legitimately fetched
+ * via that same endpoint. Fire-and-forget from the caller's
+ * perspective (204 No Content) — AuditLogTable.tsx calls `.mutate(...)`,
+ * not `.mutateAsync(...)`, and doesn't block the hover interaction on
+ * this resolving.
+ */
+export function useLogPhiReveal() {
+  return useMutation<void, unknown, { auditLogId: string; patientId: string }>({
+    mutationFn: async ({ auditLogId, patientId }) => {
+      await api.post('/audit/phi-reveal', {
+        audit_log_id: auditLogId,
+        patient_id: patientId,
+      })
     },
   })
 }
