@@ -82,6 +82,7 @@ from slowapi.util import get_remote_address
 from starlette.responses import JSONResponse, Response
 
 from ..config import settings
+from ..observability import rate_limit_rejections_total
 
 
 def rate_limit_key(request: Request) -> str:
@@ -157,6 +158,14 @@ async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) 
     if view_limit is not None:
         probe = limiter_instance._inject_headers(probe, view_limit)
 
+    # Route TEMPLATE, not raw path — same cardinality reasoning as
+    # observability.py's metrics_middleware (a rejected request has
+    # already been routed by this point, so scope["route"] is reliably
+    # populated here, unlike in that middleware's 404 case).
+    route = request.scope.get("route")
+    route_path = route.path if route is not None else request.url.path
+    rate_limit_rejections_total.labels(route=route_path).inc()
+
     retry_after_raw = probe.headers.get("retry-after")
     body = {
         "error": {
@@ -172,3 +181,5 @@ async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) 
     for key, value in probe.headers.items():
         response.headers[key] = value
     return response
+
+
