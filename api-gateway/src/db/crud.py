@@ -22,6 +22,13 @@ Phase 8 changes (ADR-015):
     changed from `list[dict]` to `{"jobs": [...], "total": N}`, matching
     list_audit_logs's `{"logs": [...], "total": N}` shape. The only
     caller (routers/ingest.py's list_jobs) is updated in this same phase.
+
+Phase 10 addition: write_audit_log() now increments
+observability.audit_log_writes_total{action=...} — the single choke
+point every audit action (existing router calls, plus this phase's new
+AuditLogMiddleware and phi_reveal endpoint) funnels through, so the
+metric can't drift out of sync with what's actually being written by
+being incremented separately at each call site.
 """
 from __future__ import annotations
 
@@ -34,6 +41,7 @@ import uuid
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..observability import audit_log_writes_total
 from .session import get_untenanted_session
 
 # ── Tenants (root table — not RLS-scoped) ───────────────────────────────────
@@ -349,6 +357,15 @@ async def write_audit_log(
             "meta": json.dumps(metadata or {}),
         },
     )
+    # Incremented here, not after the caller's session commits -- this
+    # table's own row IS the source of truth for compliance purposes;
+    # the counter is a monitoring signal, not required to be perfectly
+    # transactionally consistent with it. In the rare case the
+    # surrounding get_tenant_session() transaction later rolls back,
+    # this counter can be very slightly ahead of what actually persisted
+    # -- an accepted, standard Prometheus-counter tradeoff, not an
+    # oversight.
+    audit_log_writes_total.labels(action=action).inc()
 
 
 async def list_audit_logs(
@@ -440,3 +457,5 @@ async def log_query(
             "mv": model_version,
         },
     )
+
+
