@@ -1,0 +1,34 @@
+# Phase 10 / ADR-017. Models the docker-compose / self-hosted topology
+# — see README.md's "Known gaps" for the Aiven-managed production
+# caveat (ADR-009).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pvh-kafka-ingress
+  namespace: pvh
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: kafka
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        # api-gateway produces to doc-ingest (routers/ingest.py's
+        # publish_document_ingest). kafka-consumer both consumes
+        # doc-ingest and is where stream_consumer.py's own dispatch
+        # loop lives. celery-worker produces to doc-dlq
+        # (workers/dlq_producer.py, called from batch_worker.py's
+        # terminal-failure branch).
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: api-gateway
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kafka-consumer
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: celery-worker
+      ports:
+        - protocol: TCP
+          port: 9092

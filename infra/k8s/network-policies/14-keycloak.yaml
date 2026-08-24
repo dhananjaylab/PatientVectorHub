@@ -1,0 +1,22 @@
+# Phase 10 / ADR-017. api-gateway's KeycloakJWTMiddleware fetches JWKS
+# from Keycloak (JWT signature verification) — see src/config.py's
+# KEYCLOAK_JWKS_URL. No ingestion worker talks to Keycloak.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pvh-keycloak-ingress
+  namespace: pvh
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: keycloak
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: api-gateway
+      ports:
+        - protocol: TCP
+          port: 8080

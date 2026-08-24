@@ -1,0 +1,105 @@
+# Phase 10 / ADR-017. api-gateway is not a docker-compose service today
+# (see README.md and infra/prometheus/prometheus.yml's own comments —
+# it runs on the host in local dev), but is the one service that WOULD
+# be K8s-deployed and internet-facing in production. This policy models
+# that target deployment, not the current local dev shape.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pvh-api-gateway-ingress
+  namespace: pvh
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: api-gateway
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        # The actual internet-facing edge (Ingress controller / load
+        # balancer) is a namespace this manifest set can't name in
+        # advance — see README.md's "Known gaps": this allows from any
+        # pod with the ingress-controller's own label convention, which
+        # Phase 12's actual cluster choice will need to confirm/adjust.
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 8000
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: weaviate
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 50051
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: qdrant
+      ports:
+        - protocol: TCP
+          port: 6333
+        - protocol: TCP
+          port: 6334
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vault
+      ports:
+        - protocol: TCP
+          port: 8200
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kafka
+      ports:
+        - protocol: TCP
+          port: 9092
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: keycloak
+      ports:
+        - protocol: TCP
+          port: 8080
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: jaeger
+      ports:
+        - protocol: TCP
+          port: 4317  # OTLP gRPC
+    - to:
+        # LLM provider APIs (Anthropic/OpenAI/Gemini — see
+        # rag-engine/src/llm_router.py) + HF Inference Endpoints — see
+        # README.md's "Known gaps" for why this is a broad allow rather
+        # than an IP-allowlist.
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443

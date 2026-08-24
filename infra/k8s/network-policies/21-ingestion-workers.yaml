@@ -1,0 +1,181 @@
+# Phase 10 / ADR-017. Three services with near-identical egress needs,
+# grouped in one file rather than three near-duplicates. Differences
+# noted inline where they exist (celery-worker needs Kafka egress for
+# DLQ publishing; celery-beat needs none of the vector-store/Kafka
+# access the other two do, since scheduled_tasks.py only touches
+# Postgres).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pvh-celery-worker
+  namespace: pvh
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: celery-worker
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        # Phase 10 / ADR-017: aggregated multiprocess metrics — see
+        # observability.py's celery_worker_init() and
+        # docker-compose.yml's celery-worker service.
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 9101
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: weaviate
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 50051
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: qdrant
+      ports:
+        - protocol: TCP
+          port: 6333
+        - protocol: TCP
+          port: 6334
+    - to:
+        # dlq_producer.py's terminal-failure DLQ publish — see
+        # workers/batch_worker.py's process_document.
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kafka
+      ports:
+        - protocol: TCP
+          port: 9092
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: jaeger
+      ports:
+        - protocol: TCP
+          port: 4317
+    - to:
+        # Cloudflare R2 (document source fetch — parsers/r2_client.py)
+        # + HF Inference Endpoint (clinical_bert_embedder.py). Same
+        # "no stable CIDR" reasoning as api-gateway's own external-HTTPS
+        # rule — see README.md.
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pvh-celery-beat
+  namespace: pvh
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: celery-beat
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 9103
+  egress:
+    - to:
+        # scheduled_tasks.py's two tasks (cleanup_completed_jobs,
+        # requeue_stale_documents) only touch Postgres directly —
+        # requeue_stale_documents dispatches via process_document.delay()
+        # (Celery/Redis), not a direct call to any other service.
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: jaeger
+      ports:
+        - protocol: TCP
+          port: 4317
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pvh-kafka-consumer
+  namespace: pvh
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: kafka-consumer
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 9102
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kafka
+      ports:
+        - protocol: TCP
+          port: 9092
+    - to:
+        # process_document.apply_async() dispatch goes through Redis
+        # (Celery's broker) — stream_consumer.py never talks to
+        # Postgres/vector stores directly itself.
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: redis
+      ports:
+        - protocol: TCP
+          port: 6379
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: jaeger
+      ports:
+        - protocol: TCP
+          port: 4317
