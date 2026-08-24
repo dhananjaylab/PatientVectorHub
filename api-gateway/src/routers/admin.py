@@ -180,7 +180,7 @@ async def get_namespaces(
                 await res
 
     return NamespaceHealthResponse(
-        tenant_id=user["tenant_id"],
+        tenant_id=tenant_id,
         backend=settings.VECTOR_BACKEND,
         healthy=healthy,
     )
