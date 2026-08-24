@@ -23,6 +23,7 @@ import {
   AUDIT_ACTIONS,
   useAuditLogs,
   useExportAuditLogs,
+  useLogPhiReveal,
   type AuditAction,
   type AuditLogFilters,
   type ExportFormat,
@@ -56,6 +57,7 @@ export function AuditLogTable() {
 
   const { data, isLoading, isError, error } = useAuditLogs(filters)
   const exportLogs = useExportAuditLogs()
+  const logPhiReveal = useLogPhiReveal()
 
   function onFilterChange() {
     setOffset(0)
@@ -163,7 +165,25 @@ export function AuditLogTable() {
                     <span className={`action-pill action-${log.action}`}>{log.action}</span>
                   </td>
                   <td className="mono">{log.user_id ? `${log.user_id.slice(0, 8)}…` : '—'}</td>
-                  <td className="phi-cell" title="Hover to reveal">
+                  <td
+                    className="phi-cell"
+                    title="Hover to reveal"
+                    onMouseEnter={() => {
+                      // Phase 10 / ADR-017: each hover IS a distinct PHI
+                      // access worth its own audit row, not something to
+                      // debounce/suppress on repeat hovers of the same
+                      // row — a HIPAA audit trail wants to know every
+                      // time this was looked at, not just the first.
+                      // Fire-and-forget: does not block or visually
+                      // affect the hover/reveal interaction itself, and
+                      // a logging failure here must never prevent the
+                      // (already-visible-to-this-role) value from
+                      // rendering -- see useLogPhiReveal's own docstring.
+                      if (log.patient_id) {
+                        logPhiReveal.mutate({ auditLogId: log.id, patientId: log.patient_id })
+                      }
+                    }}
+                  >
                     {log.patient_id ?? '—'}
                   </td>
                   <td className="mono">{log.ip_address ?? '—'}</td>
