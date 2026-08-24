@@ -1,0 +1,71 @@
+# PatientVectorHub — Prometheus scrape config (Phase 10 / ADR-017).
+#
+# api-gateway is NOT a docker-compose service (see docker-compose.yml's
+# own structure — it runs on the host, connecting to containerized
+# dependencies via localhost port mappings, same as every *_URL in
+# .env.example already does). From inside this container, "the host" is
+# host.docker.internal — works natively on Docker Desktop (Mac/Windows);
+# on Linux this compose file's prometheus service adds the
+# `host-gateway` extra_hosts entry Docker Engine 20.10+ needs to make
+# that same hostname resolve. If api-gateway is later containerized
+# (out of this phase's scope), this target becomes a normal service name
+# instead.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alert_rules.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  - job_name: pvh-api-gateway
+    static_configs:
+      - targets: ["host.docker.internal:8000"]
+        labels:
+          service: api-gateway
+
+  - job_name: pvh-celery-worker
+    # Aggregating server started by observability.py's celery_worker_init()
+    # via prometheus_client.multiprocess.MultiProcessCollector — see that
+    # module's own docstring for why this specific service (unlike
+    # celery-beat/kafka-consumer below) needs the multiprocess path.
+    static_configs:
+      - targets: ["celery-worker:9101"]
+        labels:
+          service: celery-worker
+
+  - job_name: pvh-kafka-consumer
+    static_configs:
+      - targets: ["kafka-consumer:9102"]
+        labels:
+          service: kafka-consumer
+
+  - job_name: pvh-celery-beat
+    static_configs:
+      - targets: ["celery-beat:9103"]
+        labels:
+          service: celery-beat
+
+  - job_name: pvh-weaviate
+    # Weaviate exposes its own native Prometheus metrics when
+    # PROMETHEUS_MONITORING_ENABLED=true (set on the weaviate service
+    # below) — no custom exporter needed.
+    static_configs:
+      - targets: ["weaviate:2112"]
+        labels:
+          service: weaviate
+
+  - job_name: pvh-qdrant
+    # Qdrant exposes /metrics on its own REST port natively — no
+    # separate exporter needed.
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["qdrant:6333"]
+        labels:
+          service: qdrant

@@ -65,12 +65,18 @@ services:
     ports:
       - "8080:8080"
       - "50051:50051"
+      - "2112:2112"  # Phase 10 / ADR-017: native Prometheus metrics
     environment:
       AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
       PERSISTENCE_DATA_PATH: /var/lib/weaviate
       DEFAULT_VECTORIZER_MODULE: none
       ENABLE_MODULES: ""
       CLUSTER_HOSTNAME: weaviate
+      # Phase 10 / ADR-017: verified directly against Weaviate's own docs
+      # (docs.weaviate.io/deploy/configuration/monitoring) — this is the
+      # only env var required; metrics are then served on port 2112
+      # automatically, no separate exporter needed.
+      PROMETHEUS_MONITORING_ENABLED: "true"
     volumes:
       - weaviate_data:/var/lib/weaviate
     healthcheck:
@@ -210,8 +216,39 @@ services:
   celery-worker:
     build: *ingestion-build
     container_name: pvh-celery-worker
-    command: celery -A src.workers.celery_app.celery_app worker --loglevel=info --queues=doc-ingest -c 4
+    # Phase 10 / ADR-017: `rm -rf ... && mkdir -p ...` before `celery
+    # worker` itself starts is not optional cleanup — stale .db files
+    # left behind by a previous container's crash would silently corrupt
+    # MultiProcessCollector's aggregation on this run (prometheus_client's
+    # own documented multiprocess caveat). tmpfs below already gives us
+    # an empty directory on every fresh container, but this guards the
+    # same thing on a `docker-compose restart` (container reused, tmpfs
+    # NOT necessarily re-mounted empty) rather than a full recreate.
+    command: >
+      sh -c "rm -rf /tmp/pvh-prometheus-multiproc/* &&
+             mkdir -p /tmp/pvh-prometheus-multiproc &&
+             celery -A src.workers.celery_app.celery_app worker --loglevel=info --queues=doc-ingest -c 4"
     env_file: .env
+    environment:
+      # Phase 10 / ADR-017: see observability.py's own module docstring
+      # for why THIS specific service (prefork, -c 4) needs multiprocess
+      # mode while celery-beat/kafka-consumer below don't. Must be a
+      # real container env var, set before the Python process starts —
+      # see that same docstring for the "resolved once at first import"
+      # detail this depends on.
+      PROMETHEUS_MULTIPROC_DIR: /tmp/pvh-prometheus-multiproc
+      # In-network override — .env's JAEGER_ENDPOINT=http://localhost:4317
+      # is correct for api-gateway (runs on the host, not in this compose
+      # network) but wrong here; `jaeger` is this compose network's own
+      # service name for the container below.
+      JAEGER_ENDPOINT: http://jaeger:4317
+    tmpfs:
+      # Genuinely ephemeral, process-lifetime-only data — tmpfs is the
+      # semantically correct mount here, not a named volume that would
+      # persist (and need clearing) across container recreates too.
+      - /tmp/pvh-prometheus-multiproc
+    ports:
+      - "9101:9101"  # Phase 10 / ADR-017: aggregated multiprocess metrics
     depends_on:
       postgres:
         condition: service_healthy
@@ -229,6 +266,10 @@ services:
     container_name: pvh-celery-beat
     command: celery -A src.workers.celery_app.celery_app beat --loglevel=info
     env_file: .env
+    environment:
+      JAEGER_ENDPOINT: http://jaeger:4317
+    ports:
+      - "9103:9103"  # Phase 10 / ADR-017
     depends_on:
       redis:
         condition: service_healthy
@@ -244,6 +285,10 @@ services:
     container_name: pvh-kafka-consumer
     command: python -m src.workers.stream_consumer
     env_file: .env
+    environment:
+      JAEGER_ENDPOINT: http://jaeger:4317
+    ports:
+      - "9102:9102"  # Phase 10 / ADR-017
     depends_on:
       kafka:
         condition: service_healthy
@@ -255,10 +300,120 @@ services:
           memory: 512m
     logging: *default-logging
 
+  # ── Phase 10 / ADR-017: Prometheus ────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v3.9.0
+    container_name: pvh-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+    # Linux Docker Engine 20.10+ needs this explicit mapping for
+    # host.docker.internal to resolve — Docker Desktop (Mac/Windows)
+    # provides it natively, this is a no-op there. Needed because
+    # api-gateway is not itself a compose service (see prometheus.yml's
+    # own comment on the pvh-api-gateway scrape target).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      celery-worker:
+        condition: service_started
+      celery-beat:
+        condition: service_started
+      kafka-consumer:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    logging: *default-logging
+
+  # ── Phase 10 / ADR-017: Grafana ───────────────────────────────────────────
+  grafana:
+    # grafana/grafana, not grafana/grafana-oss — confirmed directly
+    # against Grafana's own current docs
+    # (grafana.com/docs/grafana/latest/setup-grafana/installation/docker):
+    # the grafana-oss Docker Hub repo stopped being updated as of release
+    # 12.4.0. grafana/grafana is the identical OSS image unless
+    # enterprise-specific env vars are set, which none are here.
+    image: grafana/grafana:13.1.4
+    container_name: pvh-grafana
+    ports:
+      - "3001:3000"  # 3000 already free locally, but avoid colliding with a
+                      # likely-running frontend dev server on that port
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: dev-only-not-for-prod
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      # Lets MonitoringPage.tsx's iframe embeds render without Grafana's
+      # own clickjacking protection blocking them — safe only because
+      # this is a same-origin-in-practice local dev setup; production
+      # would need a real reverse-proxy + allow-list, not this flag (see
+      # PHASE_10_IMPLEMENTATION_PLAN.md's production notes).
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    logging: *default-logging
+
+  # ── Phase 10 / ADR-017: Jaeger v2 ──────────────────────────────────────────
+  jaeger:
+    # Jaeger v1 (the long-familiar jaegertracing/all-in-one:1.x image)
+    # reached end-of-life 2025-12-31. v2 is a ground-up rewrite on the
+    # OpenTelemetry Collector, speaking OTLP natively on the same
+    # 4317/4318 ports this phase's JAEGER_ENDPOINT settings already
+    # targeted before this compose service existed to receive them.
+    # cr.jaegertracing.io is Jaeger's own official registry (confirmed
+    # directly against jaegertracing.io/docs/2.20/getting-started —
+    # their own docs use this registry, not a Docker Hub mirror).
+    image: cr.jaegertracing.io/jaegertracing/jaeger:2.20.0
+    container_name: pvh-jaeger
+    ports:
+      - "16686:16686"  # UI
+      - "4317:4317"    # OTLP gRPC — matches JAEGER_ENDPOINT everywhere
+      - "4318:4318"    # OTLP HTTP
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    logging: *default-logging
+
+  # ── Phase 10 / ADR-017: Alertmanager ──────────────────────────────────────
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    container_name: pvh-alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./infra/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+    logging: *default-logging
+
 volumes:
   postgres_data:
   weaviate_data:
   qdrant_data:
+  prometheus_data:
+  grafana_data:
 
 networks:
   default:

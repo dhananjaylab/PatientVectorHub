@@ -1,0 +1,109 @@
+# PatientVectorHub — Prometheus alert rules (Phase 10 / ADR-017).
+#
+# The confirmed starter set: Kafka consumer lag, DLQ growth, elevated
+# HTTP error rate, and Vault operation errors — four alert groups, six
+# individual rules. Deliberately not a comprehensive SRE rulebook (that
+# would be scope creep past "starter set") — each rule maps directly to
+# a metric this same phase introduced (see observability.py in
+# api-gateway and ingestion), so every alert here can actually fire in
+# a way that's been exercised by this phase's own tests, not aspirational.
+
+groups:
+  - name: pvh-ingestion
+    rules:
+      - alert: PVHKafkaConsumerLagHigh
+        expr: pvh_kafka_consumer_lag > 5000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Kafka consumer lag is high on {{ $labels.topic }}/{{ $labels.partition }}"
+          description: >-
+            pvh_kafka_consumer_lag has been above 5000 messages for 5+
+            minutes on topic={{ $labels.topic }} partition={{ $labels.partition }}
+            (current value {{ $value }}). Ingestion throughput may be
+            falling behind submission rate — check celery-worker's own
+            processing rate (pvh_documents_processed_total) before
+            assuming the consumer itself is stuck.
+
+      - alert: PVHKafkaConsumerLagCritical
+        expr: pvh_kafka_consumer_lag > 20000
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Kafka consumer lag is critically high on {{ $labels.topic }}/{{ $labels.partition }}"
+          description: >-
+            pvh_kafka_consumer_lag above 20000 for 5+ minutes — at
+            typical batch-worker throughput this represents a real
+            backlog, not transient noise. Check kafka-consumer's own
+            logs for dispatch failures (pvh_kafka_dispatch_failures_total)
+            before scaling celery-worker's concurrency.
+
+      - alert: PVHDlqGrowthRate
+        expr: rate(pvh_dlq_messages_total[15m]) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Documents are being routed to the dead-letter queue"
+          description: >-
+            pvh_dlq_messages_total has grown for 10+ consecutive minutes
+            (reason={{ $labels.reason }}). Each DLQ message is a document
+            that exhausted process_document's retry budget — check
+            celery-worker logs for the underlying exception, and
+            infra/scripts/ or the doc-dlq topic directly for the failed
+            payloads themselves.
+
+  - name: pvh-api-gateway
+    rules:
+      - alert: PVHHttpErrorRateHigh
+        expr: >-
+          sum(rate(pvh_http_requests_total{status_code=~"5.."}[5m]))
+          /
+          sum(rate(pvh_http_requests_total[5m]))
+          > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "api-gateway 5xx error rate above 5%"
+          description: >-
+            More than 5% of requests over the last 5 minutes returned a
+            5xx status ({{ $value | humanizePercentage }}). Check
+            api-gateway logs (structured JSON, request_id-correlated)
+            and Jaeger traces for the affected routes before assuming
+            this is a downstream (Postgres/Weaviate/LLM) outage.
+
+  - name: pvh-security
+    rules:
+      - alert: PVHVaultOperationErrors
+        expr: rate(pvh_vault_operations_total{status="error"}[5m]) > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Vault Transit operations are failing"
+          description: >-
+            pvh_vault_operations_total{status="error"} has a nonzero
+            rate over the last 5 minutes. If ALLOW_REAL_PHI is set in
+            this environment, this means PHI encryption/decryption is
+            actively failing — vault_client.py's fail-closed boot check
+            (require_vault_or_fail_closed) only guards STARTUP, not an
+            outage that begins after a process is already running.
+            Check Vault's own health (`vault status`) immediately.
+
+      - alert: PVHAccessDeniedSpike
+        expr: rate(pvh_audit_log_writes_total{action="access_denied"}[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elevated rate of RBAC access-denial events"
+          description: >-
+            pvh_audit_log_writes_total{action="access_denied"} is
+            firing more than once per second sustained over 5 minutes —
+            either a misconfigured client (wrong role assumptions) or
+            genuine probing. Check the audit_logs table (GET
+            /v1/audit/logs?action=access_denied) for the specific
+            user_id/ip_address pattern before treating this as routine.
