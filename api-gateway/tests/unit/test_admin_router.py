@@ -205,6 +205,7 @@ class TestVectorStoreNamespaceHealth:
         app = _build_app(role="engineer", tenant_id="tenant-xyz")
         mock_store = MagicMock()
         mock_store.health_check = AsyncMock(return_value=True)
+        mock_store.close = AsyncMock()
         with patch("src.routers.admin.get_store", return_value=mock_store) as mocked_get_store:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
                 resp = await c.get("/v1/admin/vector-store/namespaces")
@@ -220,6 +221,7 @@ class TestVectorStoreNamespaceHealth:
         app = _build_app(role="admin")
         mock_store = MagicMock()
         mock_store.health_check = AsyncMock(return_value=True)
+        mock_store.close = AsyncMock()
         with patch("src.routers.admin.get_store", return_value=mock_store):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
                 resp = await c.get("/v1/admin/vector-store/namespaces")
@@ -230,6 +232,7 @@ class TestVectorStoreNamespaceHealth:
         app = _build_app(role="engineer")
         mock_store = MagicMock()
         mock_store.health_check = AsyncMock(return_value=False)
+        mock_store.close = AsyncMock()
         with patch("src.routers.admin.get_store", return_value=mock_store):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
                 resp = await c.get("/v1/admin/vector-store/namespaces")
@@ -242,7 +245,9 @@ class TestVectorStoreNamespaceHealth:
         app = _build_app(role=role)
         mock_store = MagicMock()
         mock_store.health_check = AsyncMock(return_value=True)
+        mock_store.close = AsyncMock()
         with patch("src.routers.admin.get_store", return_value=mock_store):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
                 resp = await c.get("/v1/admin/vector-store/namespaces")
         assert resp.status_code == 403
+

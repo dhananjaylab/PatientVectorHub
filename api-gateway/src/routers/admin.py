@@ -167,12 +167,23 @@ async def get_namespaces(
     response: Response,
     user=Depends(get_current_user),
 ) -> NamespaceHealthResponse:
-    store = get_store(user["tenant_id"])
-    healthy = await store.health_check()
+    tenant_id = user["tenant_id"] or "default"
+    store = get_store(tenant_id)
+    try:
+        healthy = await store.health_check()
+    finally:
+        import inspect
+        close_method = getattr(store, "close", None)
+        if callable(close_method):
+            res = close_method()
+            if inspect.isawaitable(res):
+                await res
+
     return NamespaceHealthResponse(
         tenant_id=user["tenant_id"],
         backend=settings.VECTOR_BACKEND,
         healthy=healthy,
     )
+
 
 

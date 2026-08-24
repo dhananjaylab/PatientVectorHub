@@ -66,13 +66,8 @@ class DualWriteVectorStore(VectorStoreInterface):
         return await self.primary.health_check()
 
     async def close(self) -> None:
-        """Best-effort close of both underlying clients. Not currently
-        called anywhere (batch_worker.py doesn't call close() on the
-        Phase 4 WeaviateStore either — a pre-existing gap, not introduced
-        here), but provided for whenever that's addressed. WeaviateStore's
-        close() is sync (weaviate-client v4) and QdrantStore's is async
-        (qdrant-client's AsyncQdrantClient) — this handles both rather
-        than assuming either shape."""
+        """Best-effort close of both underlying clients. Handles both sync
+        and async close shapes for flexibility (e.g. sync mock objects in tests)."""
         import inspect
 
         for store in (self.primary, self.secondary):
@@ -82,3 +77,5 @@ class DualWriteVectorStore(VectorStoreInterface):
             result = close()
             if inspect.isawaitable(result):
                 await result
+
+

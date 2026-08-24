@@ -70,8 +70,13 @@ class VectorStoreInterface(ABC):
         """Return True if the store is reachable and healthy."""
         ...
 
+    @abstractmethod
+    async def close(self) -> None:
+        """Close connections to the backend store."""
+        ...
 
-def get_store(tenant_id: str) -> VectorStoreInterface:
+
+def get_store(tenant_id: str | None) -> VectorStoreInterface:
     """
     Factory — returns the correct backend based on VECTOR_BACKEND.
 
@@ -85,6 +90,9 @@ def get_store(tenant_id: str) -> VectorStoreInterface:
     one that's down and shouldn't keep receiving writes.
     """
     import os
+
+    if not tenant_id:
+        tenant_id = "default"
 
     backend = os.getenv("VECTOR_BACKEND", "weaviate")
     if backend == "qdrant":

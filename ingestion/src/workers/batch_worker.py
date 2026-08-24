@@ -78,8 +78,15 @@ def process_document(
         chunks = _to_vector_chunks(raw_chunks, document_type, patient_id_hash)
 
         from vector_store.interface import get_store  # local import — see module docstring
+        import inspect
         store = get_store(tenant_id)
-        asyncio.run(store.upsert(doc_id, chunks, vectors))
+        try:
+            asyncio.run(store.upsert(doc_id, chunks, vectors))
+        finally:
+            close_result = store.close()
+            if inspect.isawaitable(close_result):
+                asyncio.run(close_result)
+
 
         update_document_embedding_status(
             tenant_id, doc_id, "completed",

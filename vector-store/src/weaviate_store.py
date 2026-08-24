@@ -145,7 +145,7 @@ class WeaviateStore(VectorStoreInterface):
             where=Filter.by_property("document_id").equal(doc_id)
         )
 
-    def close(self) -> None:
+    async def close(self) -> None:
         self._client.close()
 
 

@@ -144,4 +144,5 @@ class TestFullQueryPipelineLive:
             assert len(result["answer"]) > 0
         finally:
             await store.delete(doc_id)
-            store.close()
+            await store.close()
+

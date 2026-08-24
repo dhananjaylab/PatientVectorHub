@@ -56,7 +56,7 @@ class TestWeaviateStoreLive:
             assert any(r.doc_id == doc_id for r in results)
         finally:
             await store.delete(doc_id)
-            store.close()
+            await store.close()
 
     @pytest.mark.asyncio
     async def test_delete_removes_the_chunk(self, chunk):
@@ -71,7 +71,7 @@ class TestWeaviateStoreLive:
         results = await store.search("elevated HbA1c diabetes", vector, top_k=20)
 
         assert not any(r.doc_id == doc_id for r in results)
-        store.close()
+        await store.close()
 
     @pytest.mark.asyncio
     async def test_health_check_is_true_against_live_instance(self):
@@ -79,7 +79,8 @@ class TestWeaviateStoreLive:
 
         store = WeaviateStore(TENANT_ID)
         assert await store.health_check() is True
-        store.close()
+        await store.close()
+
 
 class TestQdrantStoreLive:
     @pytest.mark.asyncio
