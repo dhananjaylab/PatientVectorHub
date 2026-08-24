@@ -327,3 +327,75 @@ class TestExportAuditLogs:
         assert metadata["export_format"] == "json"
         assert metadata["truncated"] is False
         assert metadata["filters"]["action"] == "phi_reveal"
+
+
+class TestPhiReveal:
+    """Phase 10 / ADR-017 — POST /v1/audit/phi-reveal."""
+
+    @pytest.mark.asyncio
+    async def test_auditor_can_log_a_reveal(self):
+        app = _build_app(role="auditor", user_id="auditor-1")
+        with patch("src.routers.audit.crud.write_audit_log", new=AsyncMock()) as mocked_write:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+                resp = await c.post(
+                    "/v1/audit/phi-reveal",
+                    json={"audit_log_id": "log-123", "patient_id": "patient-abc"},
+                )
+        assert resp.status_code == 204
+        mocked_write.assert_called_once()
+        kwargs = mocked_write.call_args.kwargs
+        assert kwargs["action"] == "phi_reveal"
+        assert kwargs["user_id"] == "auditor-1"
+        assert kwargs["patient_id"] == "patient-abc"
+        assert kwargs["metadata"]["revealed_audit_log_id"] == "log-123"
+
+    @pytest.mark.asyncio
+    async def test_admin_can_log_a_reveal(self):
+        """Same floor as GET /logs (require_min_role("auditor")) — admin
+        passes that floor same as auditor does."""
+        app = _build_app(role="admin")
+        with patch("src.routers.audit.crud.write_audit_log", new=AsyncMock()):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+                resp = await c.post(
+                    "/v1/audit/phi-reveal",
+                    json={"audit_log_id": "log-1", "patient_id": "p-1"},
+                )
+        assert resp.status_code == 204
+
+    @pytest.mark.asyncio
+    async def test_engineer_and_analyst_pass_the_auditor_floor(self):
+        """_HIERARCHY ranks admin=4, engineer=3, analyst=2, auditor=1,
+        readonly=0 (middleware/rbac.py) — require_min_role("auditor") is
+        a rank->=1 floor, so engineer/analyst (both ranked ABOVE
+        auditor) legitimately pass it, same as they do on GET /logs
+        itself. Confirmed by actually running this, not assumed —
+        an earlier version of this test wrongly expected engineer to be
+        rejected here."""
+        for role in ("engineer", "analyst"):
+            app = _build_app(role=role, user_id=f"{role}-1")
+            with patch("src.routers.audit.crud.write_audit_log", new=AsyncMock()):
+                async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+                    resp = await c.post(
+                        "/v1/audit/phi-reveal",
+                        json={"audit_log_id": "log-1", "patient_id": "p-1"},
+                    )
+            assert resp.status_code == 204, f"role={role}"
+
+    @pytest.mark.asyncio
+    async def test_readonly_is_rejected_403(self):
+        app = _build_app(role="readonly")
+        with patch("src.routers.audit.crud.write_audit_log", new=AsyncMock()):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+                resp = await c.post(
+                    "/v1/audit/phi-reveal",
+                    json={"audit_log_id": "log-1", "patient_id": "p-1"},
+                )
+        assert resp.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_missing_required_field_is_rejected_422(self):
+        app = _build_app(role="auditor")
+        with patch("src.routers.audit.crud.write_audit_log", new=AsyncMock()):
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+                resp = await c.post("/v1/audit/phi-reveal", json={"patient_id": "p-1"})
+        assert resp.status_code == 422
