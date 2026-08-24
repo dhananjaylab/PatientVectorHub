@@ -41,7 +41,7 @@ from ..db import crud
 from ..deps import get_current_user, get_db
 from ..middleware.rate_limit import limiter
 from ..middleware.rbac import require_min_role, require_role
-from ..schemas.audit import AuditLogEntry, AuditLogListResponse
+from ..schemas.audit import AuditLogEntry, AuditLogListResponse, PhiRevealRequest
 
 router = APIRouter()
 
@@ -162,6 +162,9 @@ async def export_audit_logs(
         db,
         action="data_export",
         user_id=user["user_id"],
+        ip_address=getattr(request.state, "ip_address", None),
+        request_id=getattr(request.state, "request_id", None),
+        status_code=200,
         metadata={
             "export_format": format,
             "row_count": len(rows),
@@ -195,3 +198,38 @@ async def export_audit_logs(
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="audit-logs-{filename_stamp}.csv"'},
     )
+
+
+@router.post("/phi-reveal", status_code=204, dependencies=[require_min_role("auditor")])
+@limiter.limit("200/minute")  # same ceiling as GET /logs — a user could hover many rows
+async def log_phi_reveal(
+    body: PhiRevealRequest,
+    request: Request,
+    response: Response,
+    db=Depends(get_db),
+    user=Depends(get_current_user),
+) -> None:
+    """Phase 10 / ADR-017 — closes the gap Phase 9's ADR-016 flagged by
+    name: the dashboard's `.phi-cell` hover-to-reveal was purely a CSS
+    effect with no logging, because Phase 9 didn't own backend scope.
+    audit_logs.action reserved 'phi_reveal' since migration 004 with no
+    caller until now — same "reserved ahead of the phase that claims it"
+    shape as 'data_export' before Phase 8 built export_audit_logs above.
+
+    require_min_role("auditor") matches GET /logs' own floor rather than
+    inventing a separate gate: a caller can only ever reveal a
+    patient_id they already legitimately fetched via that same endpoint,
+    so the two floors are naturally the same one.
+    """
+    await crud.write_audit_log(
+        db,
+        action="phi_reveal",
+        user_id=user["user_id"],
+        patient_id=body.patient_id,
+        ip_address=getattr(request.state, "ip_address", None),
+        request_id=getattr(request.state, "request_id", None),
+        status_code=204,
+        metadata={"revealed_audit_log_id": body.audit_log_id},
+    )
+
+

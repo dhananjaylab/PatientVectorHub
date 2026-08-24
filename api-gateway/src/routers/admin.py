@@ -79,7 +79,13 @@ async def create_key(
         user_id=user["user_id"],
     )
     await crud.write_audit_log(
-        db, action="api_key_create", user_id=user["user_id"], metadata={"key_id": result["key_id"]}
+        db,
+        action="api_key_create",
+        user_id=user["user_id"],
+        ip_address=getattr(request.state, "ip_address", None),
+        request_id=getattr(request.state, "request_id", None),
+        status_code=201,
+        metadata={"key_id": result["key_id"]},
     )
     return CreateApiKeyResponse(**result)
 
@@ -100,7 +106,13 @@ async def revoke_key(
     if not await crud.revoke_api_key(db, key_id=key_id):
         raise HTTPException(status_code=404, detail="API key not found")
     await crud.write_audit_log(
-        db, action="api_key_revoke", user_id=user["user_id"], metadata={"key_id": key_id}
+        db,
+        action="api_key_revoke",
+        user_id=user["user_id"],
+        ip_address=getattr(request.state, "ip_address", None),
+        request_id=getattr(request.state, "request_id", None),
+        status_code=204,
+        metadata={"key_id": key_id},
     )
 
 
@@ -162,3 +174,5 @@ async def get_namespaces(
         backend=settings.VECTOR_BACKEND,
         healthy=healthy,
     )
+
+
