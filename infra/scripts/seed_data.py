@@ -31,6 +31,7 @@ import os
 import sys
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+import base64
 import uuid
 import hashlib
 import secrets
@@ -46,7 +47,118 @@ except ImportError:
     text = None
     Connection = None
 
+try:
+    import hvac
+except ImportError:
+    hvac = None
+
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+
+# ── Vault Transit PHI encryption (Phase 10 / ADR-017) ───────────────────────
+# Same defensive-import posture this file already uses for sqlalchemy
+# above (degrade gracefully rather than hard-crash on an optional dep) —
+# hvac not being installed in whatever environment runs this script
+# falls back to fake_mrn() below, same as sqlalchemy missing already
+# printed a message and exited rather than raising an ImportError
+# traceback.
+VAULT_ADDR = os.getenv("VAULT_ADDR", "http://localhost:8200")
+VAULT_TOKEN = os.getenv("VAULT_TOKEN", "dev-root-token")
+VAULT_TRANSIT_KEY = os.getenv("VAULT_TRANSIT_KEY", "phi-key")
+# Mirrors ingestion/src/config.py's and api-gateway/src/config.py's own
+# ALLOW_REAL_PHI guardrail — same name, same default, so one env var
+# means the same thing everywhere. This script has always generated
+# only synthetic data (see module docstring: "NO real PHI") regardless
+# of this flag; what ALLOW_REAL_PHI controls here is specifically
+# whether a Vault-unreachable seed run is allowed to silently fall back
+# to a placeholder MRN shape, or must fail loudly instead — see
+# resolve_mrn() below.
+ALLOW_REAL_PHI = os.getenv("ALLOW_REAL_PHI", "false").lower() == "true"
+
+_vault_client = None
+
+
+def _get_vault_client():
+    global _vault_client
+    if _vault_client is None and hvac is not None:
+        _vault_client = hvac.Client(url=VAULT_ADDR, token=VAULT_TOKEN)
+    return _vault_client
+
+
+def _vault_ready() -> bool:
+    """Checked ONCE per seed() run, not once per patient (2000 health +
+    read_key calls before every one of 2000 encrypts would be wasteful
+    -- see resolve_mrn()'s caller in seed() for how the result is
+    threaded through instead of re-checked)."""
+    if hvac is None:
+        return False
+    client = _get_vault_client()
+    try:
+        client.sys.read_health_status(method="GET")
+        client.secrets.transit.read_key(name=VAULT_TRANSIT_KEY)
+        return True
+    except Exception:
+        return False
+
+
+def _mrn_plaintext_for_seed(seed: str) -> str:
+    """The synthetic (never-real) value that gets encrypted -- same
+    deterministic per-seed shape the old fake_mrn() always used, minus
+    the "vault:v1:SEED_" wrapping (that wrapping is now genuinely
+    Vault's own ciphertext format, not something to hand-roll)."""
+    h = hashlib.sha256(seed.encode()).hexdigest()[:12].upper()
+    return f"SEED-MRN-{h}"
+
+
+def real_mrn(seed: str) -> str:
+    """Encrypts synthetic plaintext via a REAL Vault Transit call --
+    proves this phase's actual encryption pathway end to end (same
+    api-gateway/src/vault_client.py encrypt_phi_sync() logic, verified
+    against an actually-installed hvac the same way there) rather than
+    a hand-rolled lookalike string. The plaintext being encrypted is
+    still synthetic (_mrn_plaintext_for_seed) -- only the ENCRYPTION is
+    real, which is the part this phase actually needed to prove works.
+    """
+    client = _get_vault_client()
+    plaintext = _mrn_plaintext_for_seed(seed)
+    b64_plaintext = base64.b64encode(plaintext.encode("utf-8")).decode("ascii")
+    response = client.secrets.transit.encrypt_data(
+        name=VAULT_TRANSIT_KEY, plaintext=b64_plaintext
+    )
+    return response["data"]["ciphertext"]
+
+
+def fake_mrn(seed: str) -> str:
+    """Fallback placeholder when Vault isn't reachable/configured --
+    kept in the same "vault:v1:..."-shaped format Vault's own ciphertext
+    uses, so patients.mrn never has two visually different value shapes
+    depending on which environment seeded a given row. Used only when
+    ALLOW_REAL_PHI is NOT set -- see resolve_mrn()."""
+    h = hashlib.sha256(seed.encode()).hexdigest()[:12].upper()
+    return f"vault:v1:SEED_{h}"
+
+
+def resolve_mrn(seed: str, *, vault_ready: bool) -> str:
+    """Real encryption when Vault is actually reachable; a clearly
+    fake-shaped placeholder when it isn't AND real PHI was never in
+    play (ALLOW_REAL_PHI unset — the common case for casual local dev
+    without `docker-compose up vault`); fail-closed (raise, don't seed
+    at all) when ALLOW_REAL_PHI is set and Vault genuinely isn't
+    available — mirrors vault_client.py's require_vault_or_fail_closed()
+    for exactly the same reason: an environment that's supposed to
+    handle real PHI must never silently persist anything unencrypted,
+    not even in a seed script most people think of as "just test data".
+    """
+    if vault_ready:
+        return real_mrn(seed)
+    if ALLOW_REAL_PHI:
+        raise RuntimeError(
+            "ALLOW_REAL_PHI is set but Vault is unreachable at "
+            f"{VAULT_ADDR} or transit key '{VAULT_TRANSIT_KEY}' doesn't "
+            "exist -- refusing to seed PHI-shaped data unencrypted. Run "
+            "infra/scripts/vault_init.sh first, or start Vault via "
+            "`docker-compose up vault`."
+        )
+    return fake_mrn(seed)
 
 
 def get_database_url() -> str:
@@ -79,12 +191,6 @@ TENANTS = [
 ROLES = ["admin", "engineer", "analyst", "auditor"]
 
 DOCUMENT_TYPES = ["clinical_note", "lab_result", "imaging_report"]
-
-
-def fake_mrn(seed: str) -> str:
-    """Return a Vault-ciphertext-style placeholder - never real PHI."""
-    h = hashlib.sha256(seed.encode()).hexdigest()[:12].upper()
-    return f"vault:v1:SEED_{h}"
 
 
 def fake_api_key_hash(seed: str) -> tuple[str, str]:
@@ -146,6 +252,26 @@ def seed() -> None:
     engine = create_engine(get_database_url(), echo=False, pool_pre_ping=True)
     seed_api_keys: list[tuple[str, str]] = []  # (label, plaintext) — printed at the end
 
+    # Phase 10 / ADR-017: checked ONCE here, not once per patient (2000
+    # health + read_key calls before every one of 2000 encrypts would be
+    # wasteful) -- threaded through to resolve_mrn() below.
+    vault_ready = _vault_ready()
+    if vault_ready:
+        print(f"  OK Vault reachable at {VAULT_ADDR}, transit key '{VAULT_TRANSIT_KEY}' "
+              "exists -- patient MRNs will be REAL Vault Transit ciphertext "
+              "(encrypting synthetic plaintext, per this script's own "
+              "'NO real PHI' data)")
+    elif ALLOW_REAL_PHI:
+        print(f"  FAIL ALLOW_REAL_PHI=true but Vault is unreachable at {VAULT_ADDR} "
+              f"or transit key '{VAULT_TRANSIT_KEY}' is missing.")
+        print("  Run infra/scripts/vault_init.sh first, or `docker-compose up vault`.")
+        sys.exit(1)
+    else:
+        print(f"  WARN Vault unreachable at {VAULT_ADDR} -- falling back to fake_mrn() "
+              "placeholder ciphertext-shaped strings (fine for casual local dev "
+              "without `docker-compose up vault`; will refuse to run this way "
+              "once ALLOW_REAL_PHI=true)")
+
     print("Connecting to configured PostgreSQL database...")
     with engine.connect() as conn:
         print("Connected. Seeding rows...")
@@ -196,7 +322,7 @@ def seed() -> None:
             sample_ids = []
             for j in range(1000):
                 pid = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"patient-{tid}-{j}"))
-                mrn = fake_mrn(f"{tid}-{j}")
+                mrn = resolve_mrn(f"{tid}-{j}", vault_ready=vault_ready)
                 batch.append({"id": pid, "mrn": mrn, "tid": tid})
                 if j < 3:
                     sample_ids.append(pid)

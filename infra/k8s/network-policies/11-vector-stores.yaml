@@ -1,0 +1,72 @@
+# Phase 10 / ADR-017.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pvh-weaviate-ingress
+  namespace: pvh
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: weaviate
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: api-gateway
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: celery-worker
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kafka-consumer
+      ports:
+        - protocol: TCP
+          port: 8080
+        - protocol: TCP
+          port: 50051  # gRPC
+    - from:
+        # Phase 10 / ADR-017: native Prometheus metrics — see
+        # docker-compose.yml's weaviate service (PROMETHEUS_MONITORING_ENABLED)
+        # and infra/prometheus/prometheus.yml's pvh-weaviate scrape job.
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 2112
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pvh-qdrant-ingress
+  namespace: pvh
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: qdrant
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: api-gateway
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: celery-worker
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kafka-consumer
+        # Qdrant's REST port (6333) also serves /metrics natively — see
+        # infra/prometheus/prometheus.yml's pvh-qdrant scrape job — so
+        # Prometheus needs the same port, not a separate one.
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 6333
+        - protocol: TCP
+          port: 6334  # gRPC

@@ -120,6 +120,24 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     ENVIRONMENT: str = "development"
 
+    # ── Observability (Phase 10 / ADR-017) ──────────────────────────────────
+    # No FastAPI process exists here — celery-worker, celery-beat, and
+    # kafka-consumer (stream_consumer.py) are three separate long-running
+    # processes with no HTTP server of their own, so each needs its own
+    # bare metrics port. celery-worker runs prefork with real concurrency
+    # (docker-compose.yml: `-c 4`) — see observability.py's own docstring
+    # for why that specific process needs prometheus_client's multiprocess
+    # mode (PROMETHEUS_MULTIPROC_DIR) while beat/kafka-consumer (both
+    # single-process) don't.
+    METRICS_ENABLED: bool = True
+    TRACING_ENABLED: bool = True
+    JAEGER_ENDPOINT: str = "http://localhost:4317"
+    OTEL_SERVICE_NAME: str = "pvh-ingestion"
+    CELERY_WORKER_METRICS_PORT: int = 9101
+    KAFKA_CONSUMER_METRICS_PORT: int = 9102
+    CELERY_BEAT_METRICS_PORT: int = 9103
+    PROMETHEUS_MULTIPROC_DIR: str = ""
+
     def model_post_init(self, __context) -> None:  # pydantic v2 hook
         if (
             self.ALLOW_REAL_PHI

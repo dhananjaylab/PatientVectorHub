@@ -35,3 +35,18 @@ class AuditLogListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class PhiRevealRequest(BaseModel):
+    """Phase 10 / ADR-017. Body for POST /v1/audit/phi-reveal — fired by
+    dashboard/src/components/audit/AuditLogTable.tsx's `.phi-cell` when a
+    user actually hovers to reveal a blurred patient_id (see that
+    component's own docstring: before this phase, the reveal was purely
+    a CSS hover effect with no logging at all). audit_log_id identifies
+    WHICH row's patient_id was revealed — the same patient_id can appear
+    on many rows, and knowing which specific row prompted the reveal is
+    more useful audit-trail context than the bare patient_id alone.
+    """
+
+    audit_log_id: str
+    patient_id: str

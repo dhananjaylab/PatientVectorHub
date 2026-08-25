@@ -35,7 +35,17 @@ async def retrieve(
     first place this pre-existing gap actually surfaces."""
     query_vector = await embed_query(query_text)
     store = get_store(tenant_id)
-    results: list[SearchResult] = await store.search(
-        query_text, query_vector, top_k=top_k, filters=filters
-    )
-    return results
+    try:
+        results: list[SearchResult] = await store.search(
+            query_text, query_vector, top_k=top_k, filters=filters
+        )
+        return results
+    finally:
+        import inspect
+        close_method = getattr(store, "close", None)
+        if callable(close_method):
+            res = close_method()
+            if inspect.isawaitable(res):
+                await res
+
+

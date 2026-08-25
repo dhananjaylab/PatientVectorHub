@@ -38,6 +38,14 @@ _engine: AsyncEngine = create_async_engine(
 _session_factory = async_sessionmaker(_engine, expire_on_commit=False, class_=AsyncSession)
 
 
+def get_engine() -> AsyncEngine:
+    """Public accessor for the module-level engine -- used by
+    observability.py's configure_tracing() to attach
+    SQLAlchemyInstrumentor without reaching into the private `_engine`
+    name from another module."""
+    return _engine
+
+
 @asynccontextmanager
 async def get_tenant_session(tenant_id: str) -> AsyncIterator[AsyncSession]:
     """Yield an AsyncSession scoped to a single tenant for the duration of
@@ -90,3 +98,5 @@ async def get_untenanted_session() -> AsyncIterator[AsyncSession]:
 async def dispose_engine() -> None:
     """Call from the FastAPI lifespan shutdown handler."""
     await _engine.dispose()
+
+

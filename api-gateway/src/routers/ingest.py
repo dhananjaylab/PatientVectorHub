@@ -37,6 +37,7 @@ from ..deps import get_current_user, get_db
 from ..kafka_utils import publish_document_ingest
 from ..middleware.rate_limit import limiter
 from ..middleware.rbac import require_min_role
+from ..observability import documents_ingested_total
 from ..schemas.ingest import IngestJobCreate, IngestJobResponse
 
 router = APIRouter()
@@ -102,11 +103,26 @@ async def create_job(
             chunk_size=body.chunk_size,
             chunk_overlap=body.chunk_overlap,
         )
+        # "submitted", not "completed" -- this only confirms the doc was
+        # accepted and published to Kafka, not that ingestion succeeded.
+        # Actual outcome is pvh_documents_processed_total{status=...},
+        # incremented worker-side in batch_worker.py once processing
+        # actually finishes (or fails) -- two different signals
+        # (API acceptance rate vs. real processing outcome) deliberately
+        # kept as two different metrics rather than conflated into one.
+        documents_ingested_total.labels(
+            status="submitted",
+            document_type=doc_ref.document_type,
+            source_type=body.source_type,
+        ).inc()
 
     await crud.write_audit_log(
         db,
         action="document_ingest",
         user_id=user["user_id"],
+        ip_address=getattr(request.state, "ip_address", None),
+        request_id=getattr(request.state, "request_id", None),
+        status_code=201,
         metadata={"job_id": job_id, "doc_count": len(body.documents)},
     )
 
@@ -144,3 +160,5 @@ async def list_jobs(
 ) -> dict:
     result = await crud.list_ingestion_jobs(db, status=status, limit=limit, offset=offset)
     return {"jobs": result["jobs"], "total": result["total"], "limit": limit, "offset": offset}
+
+

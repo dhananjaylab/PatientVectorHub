@@ -16,7 +16,8 @@
 import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { initKeycloak, keycloak } from './lib/keycloak'
+import { isAuthEnabled, initKeycloak, keycloak } from './lib/keycloak'
+import { ErrorBoundary } from './components/common/ErrorBoundary'
 import { useAuthStore } from './stores/useAuthStore'
 import { ROLE_PRIORITY, type Role } from './lib/rbac'
 import { RoleGuard } from './components/common/RoleGuard'
@@ -48,18 +49,37 @@ export default function App() {
       .then((authed) => {
         if (authed && keycloak.tokenParsed) {
           const t = keycloak.tokenParsed as Record<string, unknown>
-          const roles = (t['realm_access'] as { roles?: string[] })?.roles ?? []
-          const role = (ROLE_PRIORITY.find((r) => roles.includes(r)) ?? 'readonly') as Role
+          const realmRoles = (t['realm_access'] as { roles?: string[] })?.roles ?? []
+          const resourceRoles = Object.values((t['resource_access'] as Record<string, { roles?: string[] }>) ?? {}).flatMap((r) => r.roles ?? [])
+          const allRoles = [...realmRoles, ...resourceRoles].map((r) => String(r).toLowerCase())
+          const role = (ROLE_PRIORITY.find((r) => allRoles.includes(r)) ?? 'readonly') as Role
           setUser({
             userId: String(t['sub'] ?? ''),
-            email: String(t['email'] ?? ''),
+            email: String(t['email'] ?? t['preferred_username'] ?? ''),
             role,
             tenantId: String(t['tenant_id'] ?? ''),
+          })
+        } else if (!isAuthEnabled && !useAuthStore.getState().authenticated) {
+          setUser({
+            userId: 'local-dev-user',
+            email: 'dev@localhost',
+            role: 'admin',
+            tenantId: 'default',
           })
         }
         setReady(true)
       })
-      .catch(() => setReady(true))
+      .catch(() => {
+        if (!isAuthEnabled && !useAuthStore.getState().authenticated) {
+          setUser({
+            userId: 'local-dev-user',
+            email: 'dev@localhost',
+            role: 'admin',
+            tenantId: 'default',
+          })
+        }
+        setReady(true)
+      })
   }, [setUser])
 
   if (!ready) {
@@ -67,40 +87,42 @@ export default function App() {
   }
 
   return (
-    <QueryClientProvider client={qc}>
-      <BrowserRouter>
-        <AppLayout>
-          <Routes>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<DashboardPage />} />
+    <ErrorBoundary>
+      <QueryClientProvider client={qc}>
+        <BrowserRouter>
+          <AppLayout>
+            <Routes>
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/dashboard" element={<DashboardPage />} />
 
-            <Route path="/ingestion" element={<RoleGuard min="engineer"><IngestionPage /></RoleGuard>} />
-            <Route path="/ingestion/new" element={<RoleGuard min="engineer"><NewJobPage /></RoleGuard>} />
+              <Route path="/ingestion" element={<RoleGuard min="engineer"><IngestionPage /></RoleGuard>} />
+              <Route path="/ingestion/new" element={<RoleGuard min="engineer"><NewJobPage /></RoleGuard>} />
 
-            <Route path="/query" element={<RoleGuard min="analyst"><QueryPage /></RoleGuard>} />
+              <Route path="/query" element={<RoleGuard min="analyst"><QueryPage /></RoleGuard>} />
 
-            <Route path="/audit-logs" element={<RoleGuard min="auditor"><AuditLogPage /></RoleGuard>} />
+              <Route path="/audit-logs" element={<RoleGuard min="auditor"><AuditLogPage /></RoleGuard>} />
 
-            <Route path="/monitoring" element={<RoleGuard min="engineer"><MonitoringPage /></RoleGuard>} />
+              <Route path="/monitoring" element={<RoleGuard min="engineer"><MonitoringPage /></RoleGuard>} />
 
-            <Route
-              path="/admin"
-              element={
-                <RoleGuard min="engineer">
-                  <AdminLayout />
-                </RoleGuard>
-              }
-            >
-              <Route index element={<Navigate to="/admin/api-keys" replace />} />
-              <Route path="api-keys" element={<AdminApiKeysPage />} />
-              <Route path="users" element={<AdminUsersPage />} />
-              <Route path="namespaces" element={<AdminNamespacesPage />} />
-            </Route>
+              <Route
+                path="/admin"
+                element={
+                  <RoleGuard min="engineer">
+                    <AdminLayout />
+                  </RoleGuard>
+                }
+              >
+                <Route index element={<Navigate to="/admin/api-keys" replace />} />
+                <Route path="api-keys" element={<AdminApiKeysPage />} />
+                <Route path="users" element={<AdminUsersPage />} />
+                <Route path="namespaces" element={<AdminNamespacesPage />} />
+              </Route>
 
-            <Route path="*" element={<NotFoundPage />} />
-          </Routes>
-        </AppLayout>
-      </BrowserRouter>
-    </QueryClientProvider>
+              <Route path="*" element={<NotFoundPage />} />
+            </Routes>
+          </AppLayout>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ErrorBoundary>
   )
 }

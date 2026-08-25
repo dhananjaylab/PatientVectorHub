@@ -1,0 +1,34 @@
+# Phase 10 / ADR-017. Deliberately narrow: only api-gateway's own
+# src/vault_client.py (routes, and main.py's /ready health check) and
+# infra/scripts/seed_data.py call Vault in this phase's actual
+# implementation — no ingestion worker (celery-worker, celery-beat,
+# kafka-consumer) touches Vault directly today.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pvh-vault-ingress
+  namespace: pvh
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: vault
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: api-gateway
+        # seed_data.py doesn't run as a persistent deployment — if
+        # Phase 12 runs it as a one-off K8s Job (the natural fit for a
+        # script meant to run once per environment bootstrap, not stay
+        # running), that Job's pod template would need this exact label
+        # to inherit this rule. Label doesn't exist yet anywhere in this
+        # repo -- named here as the intended target, not a claim that
+        # it's already wired up.
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: pvh-seed-job
+      ports:
+        - protocol: TCP
+          port: 8200

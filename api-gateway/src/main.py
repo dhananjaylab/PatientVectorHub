@@ -53,11 +53,13 @@ from .config import settings
 from .errors import PVHError, pvh_exception_handler
 from .logging_config import configure_logging
 from .middleware.rate_limit import limiter, rate_limit_exceeded_handler
+from .observability import configure_tracing, metrics_endpoint, metrics_middleware
 from .routers import ingest as ingest_router_module
 from .routers import query as query_router_module
 from .routers.admin import router as admin_router
 from .routers.audit import router as audit_router
 from .routers.health import router as health_router
+from .vault_client import require_vault_or_fail_closed
 
 configure_logging(settings.LOG_LEVEL)
 
@@ -128,7 +130,20 @@ async def lifespan(app: FastAPI):
         log.warning("Postgres readiness pool unavailable at startup: %s", e)
         app.state.db_pool = None
 
-    app.state.vault = None  # Phase 10 (Security): hvac.Client
+    # Phase 10 (Security): lazy hvac.Client — construction alone makes no
+    # network call (verified directly in vault_client.py's own tests), so
+    # this is safe to set unconditionally even when Vault isn't reachable
+    # yet; routers/health.py's /ready already calls
+    # vault.sys.read_health_status() defensively for exactly that case.
+    from .vault_client import get_vault_client
+
+    app.state.vault = get_vault_client()
+
+    # Fail-closed: when ALLOW_REAL_PHI is set, boot must not proceed
+    # unless Vault is actually reachable and phi-key actually exists —
+    # see vault_client.py's module docstring for why this is the
+    # opposite posture from the rate limiter's deliberate fail-open one.
+    require_vault_or_fail_closed(allow_real_phi=settings.ALLOW_REAL_PHI)
 
     # Phase 4: Kafka producer, consumed by routers/ingest.py via
     # request.app.state.kafka.
@@ -220,7 +235,6 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    app.middleware("http")(request_id_middleware)
 
     # Keycloak + API-key auth context middleware — populates request.state
     # for middleware/rbac.py's require_role()/require_min_role() guards.
@@ -245,9 +259,34 @@ def create_app() -> FastAPI:
             ),
         )
 
-    # Phase 10 (Security): AuditLogMiddleware uncomment when ready
-    # from .middleware.audit_log import AuditLogMiddleware
-    # app.add_middleware(AuditLogMiddleware)
+    # Phase 10 fix (found while wiring AuditLogMiddleware below, not
+    # cosmetic): request_id_middleware used to be added BEFORE
+    # KeycloakJWTMiddleware, which made it more INNER — meaning it never
+    # ran at all when KeycloakJWTMiddleware short-circuited with an early
+    # 401 (no call_next()). Every auth failure was therefore shipped with
+    # no X-Request-ID response header and no request.state.request_id.
+    # Moved here (after auth, so more OUTER — runs before it) fixes that:
+    # request_id_middleware's "before" half now always runs first,
+    # regardless of what auth decides.
+    app.middleware("http")(request_id_middleware)
+
+    # Phase 10 (Observability): records pvh_http_requests_total /
+    # pvh_http_request_duration_seconds for literally every response —
+    # positioned outermost of all so it observes 401/403/429s too, not
+    # just 2xx. See observability.py's own docstring for the route-
+    # template-vs-raw-path cardinality reasoning.
+    if settings.METRICS_ENABLED:
+        app.middleware("http")(metrics_middleware)
+
+    # Phase 10 (Security): AuditLogMiddleware — see that module's
+    # docstring for why it sits here (needs request.state.request_id,
+    # populated by request_id_middleware just above, and
+    # request.state.tenant_id, populated by KeycloakJWTMiddleware when
+    # auth succeeds) and for the RLS-driven reason it only ever writes
+    # 403s to audit_logs, never bare 401s.
+    from .middleware.audit_log import AuditLogMiddleware
+
+    app.add_middleware(AuditLogMiddleware)
 
     # ── Routers ───────────────────────────────────────────────────────────────
     app.include_router(health_router)
@@ -255,6 +294,15 @@ def create_app() -> FastAPI:
     app.include_router(ingest_router_module.router, prefix="/v1/ingest", tags=["Ingestion"])
     app.include_router(query_router_module.router, prefix="/v1/query", tags=["Query"])
     app.include_router(audit_router, prefix="/v1/audit", tags=["Audit"])
+
+    # ── Observability (Phase 10) ─────────────────────────────────────────────
+    # /metrics was already whitelisted in KeycloakJWTMiddleware's
+    # public_paths above (and in the pre-Phase-10 default_public_paths in
+    # middleware/auth.py) before this route existed to whitelist.
+    if settings.METRICS_ENABLED:
+        app.add_api_route("/metrics", metrics_endpoint, methods=["GET"], include_in_schema=False)
+
+    configure_tracing(app)  # no-op when TRACING_ENABLED=false
 
     return app
 

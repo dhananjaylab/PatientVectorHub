@@ -49,6 +49,7 @@ from ..deps import get_current_user, get_db
 from ..errors import LLMError, QueryError
 from ..middleware.rate_limit import limiter
 from ..middleware.rbac import require_min_role
+from ..observability import query_latency_seconds
 from ..schemas.query import Citation, QueryRequest, QueryResponse, QueryResultItem
 
 router = APIRouter()
@@ -93,6 +94,21 @@ async def rag_query(
 
     latency_ms = int((time.perf_counter() - start) * 1000)
 
+    # body.llm_provider is None for the common "let the router pick"
+    # case (see schemas/query.py) — synthesize()'s own return shape
+    # ({"answer", "citations"}) doesn't report back which provider
+    # llm_router.py actually resolved that to, so an unspecified request
+    # buckets under "auto" here rather than claiming a precision this
+    # call site doesn't actually have. Surfacing the resolved provider
+    # back through synthesize()'s return value would give a real
+    # per-provider breakdown for auto-routed queries too, but that's a
+    # rag-engine contract change with its own ripple effects (other
+    # callers, existing tests) outside this phase's stated scope —
+    # flagged as a natural follow-up, not silently worked around here.
+    query_latency_seconds.labels(llm_provider=body.llm_provider or "auto").observe(
+        latency_ms / 1000
+    )
+
     # Non-fatal by convention elsewhere in this codebase (see
     # dual_write_store.py's secondary-write handling) would be the wrong
     # call here — query_logs/audit_logs writes for document_query are the
@@ -112,6 +128,9 @@ async def rag_query(
         db,
         action="document_query",
         user_id=user["user_id"],
+        ip_address=getattr(request.state, "ip_address", None),
+        request_id=getattr(request.state, "request_id", None),
+        status_code=200,
         metadata={
             "result_count": len(chunks),
             "latency_ms": latency_ms,
@@ -134,3 +153,5 @@ async def rag_query(
         ],
         latency_ms=latency_ms,
     )
+
+

@@ -79,7 +79,13 @@ async def create_key(
         user_id=user["user_id"],
     )
     await crud.write_audit_log(
-        db, action="api_key_create", user_id=user["user_id"], metadata={"key_id": result["key_id"]}
+        db,
+        action="api_key_create",
+        user_id=user["user_id"],
+        ip_address=getattr(request.state, "ip_address", None),
+        request_id=getattr(request.state, "request_id", None),
+        status_code=201,
+        metadata={"key_id": result["key_id"]},
     )
     return CreateApiKeyResponse(**result)
 
@@ -100,7 +106,13 @@ async def revoke_key(
     if not await crud.revoke_api_key(db, key_id=key_id):
         raise HTTPException(status_code=404, detail="API key not found")
     await crud.write_audit_log(
-        db, action="api_key_revoke", user_id=user["user_id"], metadata={"key_id": key_id}
+        db,
+        action="api_key_revoke",
+        user_id=user["user_id"],
+        ip_address=getattr(request.state, "ip_address", None),
+        request_id=getattr(request.state, "request_id", None),
+        status_code=204,
+        metadata={"key_id": key_id},
     )
 
 
@@ -155,10 +167,23 @@ async def get_namespaces(
     response: Response,
     user=Depends(get_current_user),
 ) -> NamespaceHealthResponse:
-    store = get_store(user["tenant_id"])
-    healthy = await store.health_check()
+    tenant_id = user["tenant_id"] or "default"
+    store = get_store(tenant_id)
+    try:
+        healthy = await store.health_check()
+    finally:
+        import inspect
+        close_method = getattr(store, "close", None)
+        if callable(close_method):
+            res = close_method()
+            if inspect.isawaitable(res):
+                await res
+
     return NamespaceHealthResponse(
-        tenant_id=user["tenant_id"],
+        tenant_id=tenant_id,
         backend=settings.VECTOR_BACKEND,
         healthy=healthy,
     )
+
+
+

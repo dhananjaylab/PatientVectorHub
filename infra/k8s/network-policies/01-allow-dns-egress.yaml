@@ -1,0 +1,27 @@
+# Phase 10 / ADR-017. Every pod needs DNS to resolve service names
+# (postgres, redis, kafka, etc. are all reached by DNS name, not IP) --
+# without this, 00-default-deny-all.yaml's egress deny silently breaks
+# every single service in the namespace in a way that's confusing to
+# debug (connections just hang/timeout with no obvious cause). Kept as
+# its own file, applied to every pod (empty podSelector) rather than
+# duplicated into each service-specific file below.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pvh-allow-dns-egress
+  namespace: pvh
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

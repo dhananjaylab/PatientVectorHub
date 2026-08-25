@@ -12,9 +12,20 @@ is the documented way to build the context from cafile/certfile/keyfile
 paths. Centralized here so dlq_producer.py and stream_consumer.py share
 one correct implementation instead of two independently-maintained ones.
 """
+import os
+from pathlib import Path
+
 from aiokafka.helpers import create_ssl_context
 
 from ..config import settings
+
+
+def _resolve_certificate_path(path: str) -> str:
+    certificate_path = Path(path)
+    if certificate_path.is_absolute():
+        return str(certificate_path)
+    repository_root = Path(__file__).resolve().parents[3]
+    return str(repository_root / Path(path.replace("\\", os.sep)))
 
 
 def kafka_client_kwargs() -> dict:
@@ -32,8 +43,20 @@ def kafka_client_kwargs() -> dict:
         )
     if settings.KAFKA_SSL_CAFILE or settings.KAFKA_SSL_CERTFILE:
         kwargs["ssl_context"] = create_ssl_context(
-            cafile=settings.KAFKA_SSL_CAFILE or None,
-            certfile=settings.KAFKA_SSL_CERTFILE or None,
-            keyfile=settings.KAFKA_SSL_KEYFILE or None,
+            cafile=(
+                _resolve_certificate_path(settings.KAFKA_SSL_CAFILE)
+                if settings.KAFKA_SSL_CAFILE
+                else None
+            ),
+            certfile=(
+                _resolve_certificate_path(settings.KAFKA_SSL_CERTFILE)
+                if settings.KAFKA_SSL_CERTFILE
+                else None
+            ),
+            keyfile=(
+                _resolve_certificate_path(settings.KAFKA_SSL_KEYFILE)
+                if settings.KAFKA_SSL_KEYFILE
+                else None
+            ),
         )
     return kwargs

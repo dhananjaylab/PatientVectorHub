@@ -1,0 +1,15 @@
+# Phase 10 / ADR-017. Applies to every pod in the namespace (empty
+# podSelector) — deny all ingress and egress by default, with every
+# other file in this directory adding back only the specific paths this
+# codebase actually uses. This is the standard Kubernetes NetworkPolicy
+# zero-trust baseline pattern, not something specific to PVH.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pvh-default-deny-all
+  namespace: pvh
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress

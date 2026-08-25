@@ -25,21 +25,28 @@ pytestmark = pytest.mark.integration
 
 TENANT_A = "00000000-0000-0000-0000-000000000001"
 
-async def _consume_one_dlq_message(timeout: float = 15.0) -> dict | None:
+async def _consume_one_dlq_message(doc_id: str, timeout: float = 15.0) -> dict | None:
     from aiokafka import AIOKafkaConsumer
-    from src.config import settings
+    from src.workers.kafka_config import kafka_client_kwargs
 
     consumer = AIOKafkaConsumer(
         "doc-dlq",
-        bootstrap_servers=settings.KAFKA_BROKERS,
+        **kafka_client_kwargs(),
         group_id=f"dlq-test-{uuid.uuid4()}",   # fresh group -> reads from the start
         auto_offset_reset="earliest",
         enable_auto_commit=True,
     )
     await consumer.start()
     try:
-        result = await asyncio.wait_for(consumer.getone(), timeout=timeout)
-        return json.loads(result.value)
+        deadline = asyncio.get_running_loop().time() + timeout
+        while True:
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                return None
+            result = await asyncio.wait_for(consumer.getone(), timeout=remaining)
+            message = json.loads(result.value)
+            if message.get("doc_id") == doc_id:
+                return message
     except asyncio.TimeoutError:
         return None
     finally:
@@ -84,7 +91,7 @@ async def test_forced_failure_lands_on_dlq_and_marks_document_failed():
             retries=3,
         )
 
-    dlq_message = await _consume_one_dlq_message()
+    dlq_message = await _consume_one_dlq_message(doc_id)
     assert dlq_message is not None, "expected a message on doc-dlq within the timeout"
     assert dlq_message["doc_id"] == doc_id
     assert "simulated corrupt document" in dlq_message["error"]

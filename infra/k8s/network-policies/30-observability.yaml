@@ -1,0 +1,186 @@
+# Phase 10 / ADR-017.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pvh-prometheus
+  namespace: pvh
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: prometheus
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: grafana
+      ports:
+        - protocol: TCP
+          port: 9090
+  egress:
+    # Every scrape target this phase's infra/prometheus/prometheus.yml
+    # actually targets — kept in sync with that file, not a superset.
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: api-gateway
+      ports:
+        - protocol: TCP
+          port: 8000
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: celery-worker
+      ports:
+        - protocol: TCP
+          port: 9101
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: celery-beat
+      ports:
+        - protocol: TCP
+          port: 9103
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kafka-consumer
+      ports:
+        - protocol: TCP
+          port: 9102
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: weaviate
+      ports:
+        - protocol: TCP
+          port: 2112
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: qdrant
+      ports:
+        - protocol: TCP
+          port: 6333
+    - to:
+        # Alertmanager receives evaluated alerts from Prometheus itself
+        # — see infra/prometheus/prometheus.yml's alerting.alertmanagers
+        # block.
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: alertmanager
+      ports:
+        - protocol: TCP
+          port: 9093
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pvh-grafana
+  namespace: pvh
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: grafana
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        # dashboard/src/pages/MonitoringPage.tsx iframe-embeds Grafana
+        # panels directly (see that file + docker-compose.yml's
+        # GF_SECURITY_ALLOW_EMBEDDING) — the browser loading that page
+        # needs a path to Grafana, same ingress-controller caveat as
+        # api-gateway's own policy (README.md's "Known gaps").
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 3000
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 9090
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pvh-jaeger
+  namespace: pvh
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: jaeger
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        # Every trace-producing service — see observability.py's
+        # configure_tracing() in both api-gateway and ingestion.
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: api-gateway
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: celery-worker
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: celery-beat
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kafka-consumer
+      ports:
+        - protocol: TCP
+          port: 4317
+        - protocol: TCP
+          port: 4318
+    - from:
+        # Jaeger's own UI (16686) — debugging access, same
+        # ingress-controller caveat as api-gateway/grafana above.
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 16686
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pvh-alertmanager
+  namespace: pvh
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: alertmanager
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 9093
+  egress:
+    # infra/alertmanager/alertmanager.yml's receiver is a local, no-op
+    # dev-only webhook (see that file's own docstring — no real
+    # Slack/PagerDuty target exists in this codebase yet). Left broad
+    # here rather than guessing at a real notification target's address.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+      ports:
+        - protocol: TCP
+          port: 443

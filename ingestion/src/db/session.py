@@ -30,6 +30,14 @@ _engine = create_engine(
 )
 
 
+def get_engine():
+    """Public accessor -- used by observability.py's configure_tracing()
+    to attach SQLAlchemyInstrumentor, mirroring
+    api-gateway/src/db/session.py's identical accessor added the same
+    phase."""
+    return _engine
+
+
 def get_all_tenant_ids() -> list[str]:
     """Real query — replaces the Phase 1 hardcoded tenant pair."""
     with _engine.connect() as conn:

@@ -1,0 +1,68 @@
+# Phase 10 / ADR-017. Models the docker-compose / self-hosted topology —
+# see README.md's "Known gaps" section for why production's actual
+# Aiven-managed Postgres (ADR-009) needs a different, egress-only
+# reconciliation this file doesn't attempt.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pvh-postgres-ingress
+  namespace: pvh
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: api-gateway
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: celery-worker
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: celery-beat
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kafka-consumer
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: keycloak
+      ports:
+        - protocol: TCP
+          port: 5432
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pvh-redis-ingress
+  namespace: pvh
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        # Every process that touches Redis: api-gateway (rate limiter
+        # storage, PHI encryption cache — see vault_client.py), and
+        # every Celery participant (broker + result backend — see
+        # celery_app.py).
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: api-gateway
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: celery-worker
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: celery-beat
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kafka-consumer
+      ports:
+        - protocol: TCP
+          port: 6379
