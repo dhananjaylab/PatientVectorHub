@@ -34,7 +34,7 @@ function NamespaceHealthPanel() {
       </div>
       <div className="summary-card">
         <span className="summary-card-label">Tenant</span>
-        <span className="summary-card-value mono">{data.tenant_id.slice(0, 8)}…</span>
+        <span className="summary-card-value mono">{data.tenant_id ? `${data.tenant_id.slice(0, 8)}…` : 'default'}</span>
       </div>
       <p className="placeholder-sub">Auto-refreshes every 15s. Last checked {new Date(dataUpdatedAt).toLocaleTimeString()}.</p>
     </div>
