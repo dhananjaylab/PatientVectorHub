@@ -19,7 +19,7 @@
  * any response that isn't in the `{ error: {...} }` shape.
  */
 import axios, { AxiosError } from 'axios'
-import { getValidToken, logout } from './keycloak'
+import { getValidToken, hasActiveAuthSession, logout } from './keycloak'
 
 export interface ApiErrorBody {
   error: {
@@ -55,7 +55,7 @@ api.interceptors.response.use(
     // branch shouldn't fire at all (the backend doesn't require a
     // credential), so it's safe to gate on isAuthEnabled implicitly via
     // logout()'s own no-op-when-disabled guard.
-    if (err.response?.status === 401) {
+    if (err.response?.status === 401 && hasActiveAuthSession()) {
       logout()
     }
     return Promise.reject(err)

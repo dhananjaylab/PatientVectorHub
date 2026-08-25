@@ -25,6 +25,7 @@
  * and isn't needed for this flow.
  */
 import Keycloak from 'keycloak-js'
+import { ROLE_PRIORITY, type Role } from './rbac'
 
 const AUTH_ENABLED = import.meta.env.VITE_AUTH_ENABLED === 'true'
 
@@ -33,6 +34,16 @@ export const keycloak = new Keycloak({
   realm: import.meta.env.VITE_KEYCLOAK_REALM,
   clientId: import.meta.env.VITE_KEYCLOAK_CLIENT_ID,
 })
+
+let initPromise: Promise<boolean> | null = null
+let refreshPromise: Promise<boolean> | null = null
+
+export interface AuthUser {
+  userId: string
+  email: string
+  role: Role
+  tenantId: string
+}
 
 /**
  * Initializes Keycloak and returns whether the session is authenticated.
@@ -50,11 +61,43 @@ export async function initKeycloak(): Promise<boolean> {
   if (!AUTH_ENABLED) {
     return false
   }
-  return keycloak.init({
-    onLoad: 'login-required',
-    pkceMethod: 'S256',
-    checkLoginIframe: false,
-  })
+  if (!initPromise) {
+    initPromise = keycloak
+      .init({
+        onLoad: 'login-required',
+        pkceMethod: 'S256',
+        checkLoginIframe: false,
+      })
+      .catch((err) => {
+        initPromise = null
+        throw err
+      })
+  }
+  return initPromise
+}
+
+export function normalizeClaimString(value: unknown): string {
+  if (typeof value === 'string') {
+    return value
+  }
+  if (Array.isArray(value) && value.length === 1 && typeof value[0] === 'string') {
+    return value[0]
+  }
+  return ''
+}
+
+export function extractAuthUser(tokenParsed: Record<string, unknown>): AuthUser {
+  const realmRoles = (tokenParsed['realm_access'] as { roles?: string[] } | undefined)?.roles ?? []
+  const resourceRoles = Object.values((tokenParsed['resource_access'] as Record<string, { roles?: string[] }> | undefined) ?? {}).flatMap((r) => r.roles ?? [])
+  const allRoles = [...realmRoles, ...resourceRoles].map((r) => String(r).toLowerCase())
+  const role = (ROLE_PRIORITY.find((r) => allRoles.includes(r)) ?? 'readonly') as Role
+
+  return {
+    userId: normalizeClaimString(tokenParsed['sub']),
+    email: normalizeClaimString(tokenParsed['email']) || normalizeClaimString(tokenParsed['preferred_username']),
+    role,
+    tenantId: normalizeClaimString(tokenParsed['tenant_id']),
+  }
 }
 
 /**
@@ -74,11 +117,15 @@ export async function getValidToken(): Promise<string | null> {
     return null
   }
   try {
-    await keycloak.updateToken(30)
+    refreshPromise ??= keycloak.updateToken(30).finally(() => {
+      refreshPromise = null
+    })
+    await refreshPromise
   } catch {
     // Refresh failed (e.g. refresh token itself expired) — fall through
     // and let the 401 interceptor in lib/api.ts redirect to login rather
     // than silently sending a stale/invalid token.
+    return null
   }
   return keycloak.token ?? null
 }
@@ -87,6 +134,16 @@ export function logout(): void {
   if (AUTH_ENABLED) {
     void keycloak.logout({ redirectUri: window.location.origin })
   }
+}
+
+export function login(): void {
+  if (AUTH_ENABLED) {
+    void keycloak.login({ redirectUri: window.location.origin })
+  }
+}
+
+export function hasActiveAuthSession(): boolean {
+  return AUTH_ENABLED && keycloak.authenticated === true
 }
 
 export const isAuthEnabled = AUTH_ENABLED

@@ -9,23 +9,51 @@
  * subject of this test; the auth store's role is set directly instead,
  * mirroring what App.tsx would do after a real token parse.
  */
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import { useAuthStore } from './stores/useAuthStore'
 import type { Role } from './lib/rbac'
 import App from './App'
 
-vi.mock('./lib/keycloak', () => ({
-  initKeycloak: vi.fn().mockResolvedValue(false),
-  keycloak: { tokenParsed: null },
+const keycloakMock = vi.hoisted(() => ({
+  authEnabled: false,
+  initKeycloak: vi.fn(),
+  extractAuthUser: vi.fn(() => ({
+    userId: 'u-1',
+    email: 'u@x.test',
+    role: 'admin',
+    tenantId: 't-1',
+  })),
+  keycloak: { tokenParsed: null as Record<string, unknown> | null },
   logout: vi.fn(),
-  isAuthEnabled: false,
+  login: vi.fn(),
+}))
+
+vi.mock('./lib/keycloak', () => ({
+  initKeycloak: keycloakMock.initKeycloak,
+  extractAuthUser: keycloakMock.extractAuthUser,
+  keycloak: keycloakMock.keycloak,
+  logout: keycloakMock.logout,
+  login: keycloakMock.login,
+  get isAuthEnabled() {
+    return keycloakMock.authEnabled
+  },
 }))
 
 vi.mock('./lib/api', () => ({
   api: { get: vi.fn().mockReturnValue(new Promise(() => {})), post: vi.fn() },
   getApiErrorMessage: vi.fn(() => ''),
 }))
+
+beforeEach(() => {
+  keycloakMock.authEnabled = false
+  keycloakMock.initKeycloak.mockReset()
+  keycloakMock.initKeycloak.mockResolvedValue(false)
+  keycloakMock.extractAuthUser.mockClear()
+  keycloakMock.keycloak.tokenParsed = null
+  keycloakMock.logout.mockClear()
+  keycloakMock.login.mockClear()
+})
 
 afterEach(() => {
   useAuthStore.getState().reset()
@@ -98,5 +126,17 @@ describe('App route guards', () => {
   it('renders NotFoundPage for an unknown route', async () => {
     await renderAtRoute('/this-route-does-not-exist', 'admin')
     expect(screen.getByText('404 — Not Found')).toBeInTheDocument()
+  })
+
+  it('shows a recoverable auth error instead of the app shell when Keycloak init fails', async () => {
+    keycloakMock.authEnabled = true
+    keycloakMock.initKeycloak.mockRejectedValueOnce(new Error('A Keycloak instance can only be initialized once'))
+
+    window.history.pushState({}, '', '/dashboard')
+    render(<App />)
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Could not finish sign-in' })).toBeInTheDocument())
+    expect(screen.getByText(/A Keycloak instance can only be initialized once/)).toBeInTheDocument()
+    expect(screen.queryByText('Overview')).not.toBeInTheDocument()
   })
 })

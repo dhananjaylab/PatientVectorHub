@@ -16,10 +16,9 @@
 import { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { isAuthEnabled, initKeycloak, keycloak } from './lib/keycloak'
+import { extractAuthUser, initKeycloak, isAuthEnabled, keycloak, login } from './lib/keycloak'
 import { ErrorBoundary } from './components/common/ErrorBoundary'
 import { useAuthStore } from './stores/useAuthStore'
-import { ROLE_PRIORITY, type Role } from './lib/rbac'
 import { RoleGuard } from './components/common/RoleGuard'
 import { AppLayout } from './components/layout/AppLayout'
 import { DashboardPage } from './pages/DashboardPage'
@@ -42,23 +41,14 @@ const qc = new QueryClient({
 
 export default function App() {
   const [ready, setReady] = useState(false)
+  const [authError, setAuthError] = useState<string | null>(null)
   const { setUser } = useAuthStore()
 
   useEffect(() => {
     initKeycloak()
       .then((authed) => {
         if (authed && keycloak.tokenParsed) {
-          const t = keycloak.tokenParsed as Record<string, unknown>
-          const realmRoles = (t['realm_access'] as { roles?: string[] })?.roles ?? []
-          const resourceRoles = Object.values((t['resource_access'] as Record<string, { roles?: string[] }>) ?? {}).flatMap((r) => r.roles ?? [])
-          const allRoles = [...realmRoles, ...resourceRoles].map((r) => String(r).toLowerCase())
-          const role = (ROLE_PRIORITY.find((r) => allRoles.includes(r)) ?? 'readonly') as Role
-          setUser({
-            userId: String(t['sub'] ?? ''),
-            email: String(t['email'] ?? t['preferred_username'] ?? ''),
-            role,
-            tenantId: String(t['tenant_id'] ?? ''),
-          })
+          setUser(extractAuthUser(keycloak.tokenParsed as Record<string, unknown>))
         } else if (!isAuthEnabled && !useAuthStore.getState().authenticated) {
           setUser({
             userId: 'local-dev-user',
@@ -69,7 +59,7 @@ export default function App() {
         }
         setReady(true)
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (!isAuthEnabled && !useAuthStore.getState().authenticated) {
           setUser({
             userId: 'local-dev-user',
@@ -77,13 +67,49 @@ export default function App() {
             role: 'admin',
             tenantId: 'default',
           })
+          setReady(true)
+          return
         }
+        const message = err instanceof Error ? err.message : 'Could not complete Keycloak authentication.'
+        setAuthError(message)
         setReady(true)
       })
   }, [setUser])
 
   if (!ready) {
     return <div className="auth-loading">Authenticating via Keycloak…</div>
+  }
+
+  if (authError) {
+    return (
+      <div className="auth-error-page">
+        <div className="auth-error-panel">
+          <p className="eyebrow">Authentication interrupted</p>
+          <h1>Could not finish sign-in</h1>
+          <p className="auth-error-copy">
+            Keycloak is expected at <span className="mono">http://localhost:8080</span>. Check that the local realm is running, then try again.
+          </p>
+          <pre className="auth-error-detail">{authError}</pre>
+          <div className="auth-error-actions">
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => {
+                if (window.location.search.includes('code=') || window.location.search.includes('error=')) {
+                  window.history.replaceState({}, '', window.location.pathname)
+                }
+                window.location.reload()
+              }}
+            >
+              Retry
+            </button>
+            <button type="button" className="btn-ghost" onClick={login}>
+              Sign in again
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
