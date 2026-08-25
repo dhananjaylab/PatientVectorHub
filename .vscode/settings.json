@@ -20,5 +20,9 @@
       "rule": "*",
       "severity": "warn"
     }
-  ]
+  ],
+  "sonarlint.connectedMode.project": {
+    "connectionId": "dhananjaylab",
+    "projectKey": "dhananjaylab_PatientVectorHub"
+  }
 }

@@ -154,7 +154,12 @@ export function useIngestionJobs(params: UseIngestionJobsParams = {}) {
         '/ingest/jobs',
         { params: { status, limit, offset } },
       )
-      return { jobs: data.jobs.map(normalizeListRow), total: data.total, limit: data.limit, offset: data.offset }
+      return {
+        jobs: Array.isArray(data?.jobs) ? data.jobs.map(normalizeListRow) : [],
+        total: data?.total ?? 0,
+        limit: data?.limit ?? limit,
+        offset: data?.offset ?? offset,
+      }
     },
     refetchInterval: 5_000,
     enabled,

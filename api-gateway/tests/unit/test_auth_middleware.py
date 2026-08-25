@@ -1,6 +1,4 @@
 """Unit tests for api-gateway/src/middleware/auth.py."""
-import sys
-import os
 import pytest
 
 from src.middleware.auth import KeycloakJWTMiddleware  # noqa: E402
@@ -68,6 +66,7 @@ class TestMiddlewareRequestHandling:
             return {
                 "role": getattr(request.state, "role", None),
                 "auth_method": getattr(request.state, "auth_method", None),
+                "tenant_id": getattr(request.state, "tenant_id", None),
             }
 
         app.add_middleware(
@@ -92,7 +91,7 @@ class TestMiddlewareRequestHandling:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
             resp = await c.get("/whoami")
         assert resp.status_code == 200
-        assert resp.json() == {"role": None, "auth_method": None}
+        assert resp.json() == {"role": None, "auth_method": None, "tenant_id": None}
 
     @pytest.mark.asyncio
     async def test_malformed_bearer_token_returns_401_not_a_crash(self, app):
@@ -160,4 +159,78 @@ class TestMiddlewareRequestHandling:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
             resp = await c.get("/whoami", headers={"X-API-Key": "pvh_a_real_looking_key"})
         assert resp.status_code == 200
-        assert resp.json() == {"role": "engineer", "auth_method": "api_key"}
+        assert resp.json() == {"role": "engineer", "auth_method": "api_key", "tenant_id": "t-1"}
+
+    @pytest.fixture
+    def valid_jwt_mocks(self, monkeypatch):
+        import src.middleware.auth as auth_module
+
+        class FakeSigningKey:
+            key = "fake-key"
+
+        async def fake_run_in_threadpool(func, *args, **kwargs):
+            return FakeSigningKey()
+
+        monkeypatch.setattr(auth_module, "run_in_threadpool", fake_run_in_threadpool)
+        return auth_module
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("tenant_claim", "expected"),
+        [
+            ("tenant-a", "tenant-a"),
+            (["tenant-a"], "tenant-a"),
+        ],
+    )
+    async def test_jwt_tenant_claim_normalizes_valid_string_shapes(
+        self, app, valid_jwt_mocks, monkeypatch, tenant_claim, expected
+    ):
+        from httpx import AsyncClient, ASGITransport
+
+        monkeypatch.setattr(
+            valid_jwt_mocks.jwt,
+            "decode",
+            lambda *args, **kwargs: {
+                "sub": "user-1",
+                "tenant_id": tenant_claim,
+                "realm_access": {"roles": ["engineer"]},
+            },
+        )
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            resp = await c.get("/whoami", headers={"Authorization": "Bearer token"})
+
+        assert resp.status_code == 200
+        assert resp.json() == {
+            "role": "engineer",
+            "auth_method": "jwt",
+            "tenant_id": expected,
+        }
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "tenant_claim",
+        [None, "", [], ["tenant-a", "tenant-b"]],
+    )
+    async def test_jwt_tenant_claim_rejects_missing_or_malformed_values(
+        self, app, valid_jwt_mocks, monkeypatch, tenant_claim
+    ):
+        from httpx import AsyncClient, ASGITransport
+
+        payload = {
+            "sub": "user-1",
+            "realm_access": {"roles": ["engineer"]},
+        }
+        if tenant_claim is not None:
+            payload["tenant_id"] = tenant_claim
+
+        monkeypatch.setattr(valid_jwt_mocks.jwt, "decode", lambda *args, **kwargs: payload)
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+            resp = await c.get("/whoami", headers={"Authorization": "Bearer token"})
+
+        assert resp.status_code == 401
+        assert resp.json()["error"] == {
+            "code": "AUTHENTICATION_FAILED",
+            "message": "Missing or invalid tenant claim",
+        }

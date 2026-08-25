@@ -158,7 +158,7 @@ export function AuditLogTable() {
               </tr>
             </thead>
             <tbody>
-              {data.logs.map((log) => (
+              {data?.logs?.map((log) => (
                 <tr key={log.id}>
                   <td className="mono">{new Date(log.created_at).toLocaleString()}</td>
                   <td>
@@ -169,16 +169,6 @@ export function AuditLogTable() {
                     className="phi-cell"
                     title="Hover to reveal"
                     onMouseEnter={() => {
-                      // Phase 10 / ADR-017: each hover IS a distinct PHI
-                      // access worth its own audit row, not something to
-                      // debounce/suppress on repeat hovers of the same
-                      // row — a HIPAA audit trail wants to know every
-                      // time this was looked at, not just the first.
-                      // Fire-and-forget: does not block or visually
-                      // affect the hover/reveal interaction itself, and
-                      // a logging failure here must never prevent the
-                      // (already-visible-to-this-role) value from
-                      // rendering -- see useLogPhiReveal's own docstring.
                       if (log.patient_id) {
                         logPhiReveal.mutate({ auditLogId: log.id, patientId: log.patient_id })
                       }
@@ -192,7 +182,7 @@ export function AuditLogTable() {
                   </td>
                 </tr>
               ))}
-              {data.logs.length === 0 && (
+              {(!data?.logs || data.logs.length === 0) && (
                 <tr>
                   <td colSpan={6} className="empty-row">
                     No audit log entries match these filters.

@@ -50,7 +50,7 @@ export function useApiKeys() {
     queryKey: ['admin-api-keys'],
     queryFn: async () => {
       const { data } = await api.get<{ api_keys: ApiKeySummary[] }>('/admin/api-keys')
-      return data.api_keys
+      return data?.api_keys ?? []
     },
   })
 }
@@ -100,7 +100,7 @@ export function useAdminUsers() {
     queryKey: ['admin-users'],
     queryFn: async () => {
       const { data } = await api.get<{ users: UserSummary[] }>('/admin/users')
-      return data.users
+      return data?.users ?? []
     },
   })
 }

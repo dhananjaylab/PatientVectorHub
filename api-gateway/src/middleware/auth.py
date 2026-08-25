@@ -145,8 +145,20 @@ class KeycloakJWTMiddleware(BaseHTTPMiddleware):
                 status_code=401,
             )
 
+        tenant_id = self._normalize_tenant_id(payload.get("tenant_id"))
+        if tenant_id is None:
+            return JSONResponse(
+                {
+                    "error": {
+                        "code": "AUTHENTICATION_FAILED",
+                        "message": "Missing or invalid tenant claim",
+                    }
+                },
+                status_code=401,
+            )
+
         request.state.user_id = payload.get("sub")
-        request.state.tenant_id = payload.get("tenant_id")
+        request.state.tenant_id = tenant_id
         request.state.email = payload.get("email")
         request.state.role = self._extract_role(payload)
         request.state.scopes = []
@@ -199,6 +211,19 @@ class KeycloakJWTMiddleware(BaseHTTPMiddleware):
     def _extract_role(payload: dict) -> str:
         roles = payload.get("realm_access", {}).get("roles", [])
         return next((r for r in _ROLE_PRIORITY if r in roles), "readonly")
+
+    @staticmethod
+    def _normalize_tenant_id(value) -> str | None:
+        if isinstance(value, str) and value:
+            return value
+        if (
+            isinstance(value, list)
+            and len(value) == 1
+            and isinstance(value[0], str)
+            and value[0]
+        ):
+            return value[0]
+        return None
 
     @staticmethod
     def _role_from_scopes(scopes: list[str]) -> str:
