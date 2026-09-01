@@ -132,25 +132,6 @@ export async function initKeycloak(): Promise<boolean> {
     return false
   }
   if (!initPromise) {
-    // Bug fix, found while verifying the loop-guard above actually
-    // stops the loop: this check must run ONLY on the invocation that's
-    // actually about to call keycloak.init(), not on every call to
-    // initKeycloak(). React StrictMode double-invokes this effect (see
-    // App.tsx) -- with the guard checked before this gate, BOTH
-    // invocations incremented the attempt counter, but only throwing on
-    // the second one is too late: the FIRST invocation had already
-    // called keycloak.init(), which had already internally triggered
-    // keycloak-js's own clearToken()->login() redirect (the actual loop
-    // mechanism -- see this file's own comment above) before the second
-    // invocation's throw ever ran. A thrown error cannot cancel a
-    // browser navigation already in flight. Gating the guard behind the
-    // same `!initPromise` check that already exists to prevent a
-    // redundant keycloak.init() call fixes both problems with one
-    // change: the guard now runs (and can meaningfully abort) exactly
-    // once per real page load, matching how often keycloak.init() is
-    // actually invoked. Verified against a full reproduction after this
-    // fix: with the guard misplaced, still looping past 10 redirects;
-    // with it here, stops at exactly MAX_LOGIN_ATTEMPTS.
     try {
       checkLoginLoopGuard()
     } catch (err) {
@@ -158,14 +139,13 @@ export async function initKeycloak(): Promise<boolean> {
       return initPromise
     }
     console.log('[KEYCLOAK] Initializing with endpoint:', keycloak.authServerUrl)
+    
     initPromise = keycloak
       .init({
         onLoad: 'login-required',
         pkceMethod: 'S256',
         checkLoginIframe: false,
         enableLogging: true,
-        enableCookieLogout: true,
-        silentCheckSsoRedirectUri: window.location.origin + '/silent-check-sso.html',
       })
       .then((authenticated) => {
         console.log('[KEYCLOAK] Authentication result:', authenticated)
@@ -174,7 +154,8 @@ export async function initKeycloak(): Promise<boolean> {
       })
       .catch((err) => {
         console.error('[KEYCLOAK] Init failed:', err)
-        initPromise = null
+        // Don't reset initPromise — let the error propagate
+        // so the app can handle it gracefully in App.tsx
         throw err
       })
   }
