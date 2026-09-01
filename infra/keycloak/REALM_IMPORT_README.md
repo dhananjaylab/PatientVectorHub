@@ -5,6 +5,7 @@ When you enable `VITE_AUTH_ENABLED=true` in the dashboard, the app tries to auth
 1. The `pvh-spa` client isn't configured in the realm
 2. The test users don't exist in Keycloak
 3. The OAuth flow can't complete
+4. The backend requires a `tenant_id` claim on JWTs, so a realm/client that exists but does not emit that claim still causes dashboard API calls to fail with `401 Missing or invalid tenant claim`
 
 ## Solution: Use Keycloak's Import Feature
 
@@ -53,7 +54,26 @@ mklink /D C:\keycloak-26.6.4\data\import C:\PatientVectorHub\infra\keycloak
 5. **Now you can enable auth:**
    - Set `VITE_AUTH_ENABLED=true` in `dashboard/.env.local`
    - Set `AUTH_ENABLED=true` in `.env` (root)
+   - If you are running standalone Keycloak on Windows instead of the Docker-mapped port, also set `KEYCLOAK_BASE_URL=http://localhost:8080` in `.env`
    - Restart both services
+
+## Important: existing realms are not overwritten on startup
+
+Keycloak's startup import skips realms that already exist. That means editing
+`infra/keycloak/realm.json` and then restarting with `--import-realm` is NOT
+enough to repair an already-imported `patientvectorhub` realm.
+
+Use the repo helper to reconcile the live realm in place:
+
+```cmd
+python infra\keycloak\import_realm.py --url http://localhost:8080 --user admin --pass admin
+```
+
+That script now does both:
+- imports the realm if it does not exist
+- updates/creates the `tenant-id-claim` protocol mapper on the live `pvh-spa`
+  client so dashboard tokens include the `tenant_id` claim the API gateway
+  requires
 
 ## Troubleshooting
 
