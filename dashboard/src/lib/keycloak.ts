@@ -157,17 +157,23 @@ export async function initKeycloak(): Promise<boolean> {
       initPromise = Promise.reject(err)
       return initPromise
     }
+    console.log('[KEYCLOAK] Initializing with endpoint:', keycloak.authServerUrl)
     initPromise = keycloak
       .init({
         onLoad: 'login-required',
         pkceMethod: 'S256',
         checkLoginIframe: false,
+        enableLogging: true,
+        enableCookieLogout: true,
+        silentCheckSsoRedirectUri: window.location.origin + '/silent-check-sso.html',
       })
       .then((authenticated) => {
+        console.log('[KEYCLOAK] Authentication result:', authenticated)
         sessionStorage.removeItem(LOGIN_ATTEMPT_KEY)
         return authenticated
       })
       .catch((err) => {
+        console.error('[KEYCLOAK] Init failed:', err)
         initPromise = null
         throw err
       })
