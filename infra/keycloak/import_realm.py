@@ -15,6 +15,21 @@ except ImportError:
     print("Error: requests library not installed. Install with: pip install requests")
     sys.exit(1)
 
+TENANT_ID_MAPPER = {
+    "name": "tenant-id-claim",
+    "protocol": "openid-connect",
+    "protocolMapper": "oidc-usermodel-attribute-mapper",
+    "consentRequired": False,
+    "config": {
+        "userinfo.token.claim": "true",
+        "user.attribute": "tenant_id",
+        "id.token.claim": "true",
+        "access.token.claim": "true",
+        "claim.name": "tenant_id",
+        "jsonType.label": "String",
+    },
+}
+
 
 class KeycloakImporter:
     def __init__(
@@ -163,6 +178,96 @@ class KeycloakImporter:
         except Exception as e:
             self.log(f"Error: {e}", "✗ ")
             return False
+
+    def _get_client_by_client_id(self, realm: str, client_id: str) -> dict | None:
+        clients_url = urljoin(self.keycloak_url, f"/admin/realms/{realm}/clients")
+        resp = self.session.get(
+            clients_url,
+            headers=self.get_headers(),
+            params={"clientId": client_id},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        clients = resp.json()
+        return clients[0] if clients else None
+
+    def _get_client_protocol_mappers(self, realm: str, client_uuid: str) -> list[dict]:
+        url = urljoin(
+            self.keycloak_url,
+            f"/admin/realms/{realm}/clients/{client_uuid}/protocol-mappers/models",
+        )
+        resp = self.session.get(url, headers=self.get_headers(), timeout=10)
+        resp.raise_for_status()
+        return resp.json()
+
+    def ensure_spa_tenant_id_mapper(self) -> bool:
+        """Ensure pvh-spa emits tenant_id in tokens even for an existing realm.
+
+        Keycloak's startup `--import-realm` path skips realms that already
+        exist, so editing realm.json alone does not repair a previously
+        imported patientvectorhub realm. This explicit reconciliation step
+        keeps the local realm in sync with the repo's expected claim
+        contract without forcing a realm delete/recreate.
+        """
+        self.log("Ensuring pvh-spa emits tenant_id claim...")
+
+        try:
+            client = self._get_client_by_client_id("patientvectorhub", "pvh-spa")
+            if not client:
+                self.log("Error: pvh-spa client not found", "✗ ")
+                return False
+
+            client_uuid = client["id"]
+            existing = self._get_client_protocol_mappers("patientvectorhub", client_uuid)
+            current = next(
+                (m for m in existing if m.get("name") == TENANT_ID_MAPPER["name"]),
+                None,
+            )
+            desired_config = TENANT_ID_MAPPER["config"]
+
+            if current and current.get("config") == desired_config:
+                self.log("tenant-id-claim mapper already attached to pvh-spa", "✓ ")
+                return True
+
+            if current:
+                mapper_id = current["id"]
+                update_body = {
+                    **current,
+                    "protocol": TENANT_ID_MAPPER["protocol"],
+                    "protocolMapper": TENANT_ID_MAPPER["protocolMapper"],
+                    "consentRequired": TENANT_ID_MAPPER["consentRequired"],
+                    "config": desired_config,
+                }
+                url = urljoin(
+                    self.keycloak_url,
+                    f"/admin/realms/patientvectorhub/clients/{client_uuid}/protocol-mappers/models/{mapper_id}",
+                )
+                resp = self.session.put(
+                    url,
+                    json=update_body,
+                    headers=self.get_headers(),
+                    timeout=10,
+                )
+                resp.raise_for_status()
+                self.log("Updated tenant-id-claim mapper on pvh-spa", "✓ ")
+                return True
+
+            url = urljoin(
+                self.keycloak_url,
+                f"/admin/realms/patientvectorhub/clients/{client_uuid}/protocol-mappers/models",
+            )
+            resp = self.session.post(
+                url,
+                json=TENANT_ID_MAPPER,
+                headers=self.get_headers(),
+                timeout=10,
+            )
+            resp.raise_for_status()
+            self.log("Created tenant-id-claim mapper on pvh-spa", "✓ ")
+            return True
+        except Exception as e:
+            self.log(f"Error: {e}", "✗ ")
+            return False
     
     def verify_users(self) -> bool:
         """Verify test users exist"""
@@ -221,7 +326,11 @@ class KeycloakImporter:
         if not self.verify_clients():
             return False
         print()
-        
+
+        if not self.ensure_spa_tenant_id_mapper():
+            return False
+        print()
+
         if not self.verify_users():
             return False
         print()
@@ -261,8 +370,8 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--file",
-        default="realm.json",
-        help="Realm JSON file (default: realm.json)",
+        default=str(Path(__file__).with_name("realm.json")),
+        help="Realm JSON file (default: bundled realm.json)",
     )
     
     args = parser.parse_args()
