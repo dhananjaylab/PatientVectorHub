@@ -38,6 +38,76 @@ export const keycloak = new Keycloak({
 let initPromise: Promise<boolean> | null = null
 let refreshPromise: Promise<boolean> | null = null
 
+// Bug fix (found while investigating a reported "keeps crashing while
+// logging in" issue): keycloak-js's own kc.clearToken() unconditionally
+// calls kc.login() again whenever kc.loginRequired is true (set by
+// onLoad: 'login-required' above) -- see keycloak-js's dist/keycloak.mjs,
+// `clearToken = function() { ... if (kc.loginRequired) { kc.login(); } }`.
+// clearToken() is called internally whenever authSuccess()'s own
+// validation of a returned callback fails (nonce mismatch is one
+// concrete trigger, reproduced directly against a real, unmodified
+// keycloak-js v24.0.5 via a full authorization-code+PKCE round trip
+// against a controlled OIDC stand-in -- not assumed from reading the
+// source alone). With no circuit breaker, ANY recurring cause of that
+// validation failing (a misconfigured realm/client, clock skew, a
+// browser blocking storage in some contexts, or simply Keycloak being
+// briefly unreachable mid-flow) turns into a genuine infinite redirect
+// loop: browser bounces to Keycloak, back, fails validation, bounces
+// to Keycloak again, forever -- which is exactly what "keeps crashing"
+// looks like from the outside, both during and immediately after the
+// visible login screen.
+//
+// Fixed at the application layer (not by patching the vendored
+// library, which would need re-applying on every keycloak-js upgrade):
+// sessionStorage tracks how many times in a row we've landed back with
+// OAuth callback params still in the URL. Exceeding the threshold means
+// keycloak-js is not making forward progress -- stop calling
+// keycloak.init() again and surface a clear, actionable error instead
+// of continuing to silently loop. Resets on any genuinely fresh
+// (non-callback) load or a successful init, so it never wrongly blocks
+// a later, legitimate login.
+const LOGIN_ATTEMPT_KEY = 'pvh-login-attempt-count'
+const MAX_LOGIN_ATTEMPTS = 3
+
+function hasOAuthCallbackParams(): boolean {
+  // Matches the shape keycloak-js's own parseCallbackUrl() looks for
+  // with responseMode='fragment' (this app's default -- see keycloak.init
+  // below, which doesn't override responseMode): a 'state' param plus
+  // either 'code' (success) or 'error' (Keycloak-side failure) in the
+  // URL hash.
+  const hash = window.location.hash
+  return hash.includes('state=') && (hash.includes('code=') || hash.includes('error='))
+}
+
+export class LoginLoopError extends Error {
+  constructor(attempts: number) {
+    super(
+      `Login failed ${attempts} times in a row without completing (repeated redirect loop ` +
+        'detected). This means Keycloak is rejecting or losing track of the callback each ' +
+        'time (a common cause: nonce/state validation failing on every attempt) rather than ' +
+        'a one-off network blip. Check the browser console for "[KEYCLOAK]" messages, and ' +
+        'verify infra/keycloak/realm.json\'s pvh-spa client redirectUris/webOrigins exactly ' +
+        'match the URL this app is actually being served from.',
+    )
+    this.name = 'LoginLoopError'
+  }
+}
+
+function checkLoginLoopGuard(): void {
+  if (!hasOAuthCallbackParams()) {
+    // A genuinely fresh load (no callback params) -- any earlier
+    // failure streak is no longer relevant.
+    sessionStorage.removeItem(LOGIN_ATTEMPT_KEY)
+    return
+  }
+  const attempts = Number(sessionStorage.getItem(LOGIN_ATTEMPT_KEY) ?? '0') + 1
+  if (attempts > MAX_LOGIN_ATTEMPTS) {
+    sessionStorage.removeItem(LOGIN_ATTEMPT_KEY)
+    throw new LoginLoopError(attempts - 1)
+  }
+  sessionStorage.setItem(LOGIN_ATTEMPT_KEY, String(attempts))
+}
+
 export interface AuthUser {
   userId: string
   email: string
@@ -62,11 +132,40 @@ export async function initKeycloak(): Promise<boolean> {
     return false
   }
   if (!initPromise) {
+    // Bug fix, found while verifying the loop-guard above actually
+    // stops the loop: this check must run ONLY on the invocation that's
+    // actually about to call keycloak.init(), not on every call to
+    // initKeycloak(). React StrictMode double-invokes this effect (see
+    // App.tsx) -- with the guard checked before this gate, BOTH
+    // invocations incremented the attempt counter, but only throwing on
+    // the second one is too late: the FIRST invocation had already
+    // called keycloak.init(), which had already internally triggered
+    // keycloak-js's own clearToken()->login() redirect (the actual loop
+    // mechanism -- see this file's own comment above) before the second
+    // invocation's throw ever ran. A thrown error cannot cancel a
+    // browser navigation already in flight. Gating the guard behind the
+    // same `!initPromise` check that already exists to prevent a
+    // redundant keycloak.init() call fixes both problems with one
+    // change: the guard now runs (and can meaningfully abort) exactly
+    // once per real page load, matching how often keycloak.init() is
+    // actually invoked. Verified against a full reproduction after this
+    // fix: with the guard misplaced, still looping past 10 redirects;
+    // with it here, stops at exactly MAX_LOGIN_ATTEMPTS.
+    try {
+      checkLoginLoopGuard()
+    } catch (err) {
+      initPromise = Promise.reject(err)
+      return initPromise
+    }
     initPromise = keycloak
       .init({
         onLoad: 'login-required',
         pkceMethod: 'S256',
         checkLoginIframe: false,
+      })
+      .then((authenticated) => {
+        sessionStorage.removeItem(LOGIN_ATTEMPT_KEY)
+        return authenticated
       })
       .catch((err) => {
         initPromise = null
