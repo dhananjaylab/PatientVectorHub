@@ -118,13 +118,15 @@ class Settings(BaseSettings):
     # -- Keycloak -----------------------------------------------------------------
     KEYCLOAK_BASE_URL: str = "http://localhost:8443"
     KEYCLOAK_REALM: str = "patientvectorhub"
-    KEYCLOAK_JWKS_URL: str = (
-        "http://localhost:8443/realms/patientvectorhub"
-        "/protocol/openid-connect/certs"
-    )
-    KEYCLOAK_ISSUER: str = (
-        "http://localhost:8443/realms/patientvectorhub"
-    )
+    # Deliberately derived from KEYCLOAK_BASE_URL + KEYCLOAK_REALM below
+    # rather than trusted independently. The local dev paths here are
+    # deterministic for every Keycloak realm, and letting these drift
+    # separately is exactly how "dashboard login works, backend JWT
+    # validation still points at the old port" regressions happen when
+    # switching between the Docker-mapped host port (8443) and a
+    # standalone Windows Keycloak start-dev on 8080.
+    KEYCLOAK_JWKS_URL: str = ""
+    KEYCLOAK_ISSUER: str = ""
     KEYCLOAK_CLIENT_ID: str = "pvh-spa"
 
     # ── LLM Providers ─────────────────────────────────────────────────────────
@@ -194,6 +196,15 @@ class Settings(BaseSettings):
             resolved = (repo_root / candidate).resolve()
             if resolved.exists():
                 setattr(self, field, str(resolved))
+
+        base_url = self.KEYCLOAK_BASE_URL.rstrip("/")
+        realm = self.KEYCLOAK_REALM.strip("/")
+        issuer = f"{base_url}/realms/{realm}"
+        # Always normalize these to the deterministic Keycloak realm
+        # endpoints so changing KEYCLOAK_BASE_URL or KEYCLOAK_REALM alone
+        # cannot leave stale 8443/8080 values behind in copied .env files.
+        self.KEYCLOAK_ISSUER = issuer
+        self.KEYCLOAK_JWKS_URL = f"{issuer}/protocol/openid-connect/certs"
         return self
 
 

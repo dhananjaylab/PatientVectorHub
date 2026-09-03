@@ -95,7 +95,14 @@ export default function App() {
               type="button"
               className="btn-primary"
               onClick={() => {
-                if (window.location.search.includes('code=') || window.location.search.includes('error=')) {
+                // Bug fix: this used to check window.location.search, but
+                // keycloak.init() below never overrides responseMode, so
+                // it defaults to 'fragment' -- state/code/error land in
+                // window.location.hash, not the query string. The old
+                // check silently never matched anything, leaving a stale
+                // (already-consumed, now-invalid) callback hash in place
+                // across a reload.
+                if (window.location.hash.includes('state=')) {
                   window.history.replaceState({}, '', window.location.pathname)
                 }
                 window.location.reload()
