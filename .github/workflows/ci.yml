@@ -224,6 +224,146 @@ jobs:
           file: api-gateway/coverage.xml
         continue-on-error: true
 
+  test-unit-ingestion:
+    name: Unit Tests (ingestion)
+    runs-on: ubuntu-latest
+    # New in Phase 11 (ADR-018). ingestion/tests/unit/ has existed since
+    # Phase 4 and has never once run in CI -- only api-gateway (test-unit
+    # above) and dashboard (dashboard-test) had CI wiring before this
+    # phase. Verified locally first: 54/54 passing, 68% coverage on src/
+    # (includes test_clinical_bert_embedder.py, relocated here this phase
+    # from embedding-server/ -- see ADR-018's "discovered bugs" section).
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install deps
+        working-directory: ingestion
+        run: pip install -r requirements.txt
+
+      - name: Run unit tests
+        working-directory: ingestion
+        run: |
+          pytest tests/unit/ -v \
+            --cov=src \
+            --cov-report=xml \
+            --cov-fail-under=65 \
+            -q
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          file: ingestion/coverage.xml
+        continue-on-error: true
+
+  test-unit-vector-store:
+    name: Unit Tests (vector-store)
+    runs-on: ubuntu-latest
+    # New in Phase 11 (ADR-018). Same never-ran-in-CI gap as ingestion
+    # above. Fixing this surfaced a real, independent bug: vector-store's
+    # own requirements.txt never listed pytest-asyncio, despite
+    # pytest.ini declaring asyncio_mode=auto and 3 of 7 unit test files
+    # using async tests -- a clean install from that file alone could
+    # never collect test_dual_write_store.py, test_qdrant_store.py, or
+    # test_weaviate_search_delete.py (reproduced locally: "'asyncio' not
+    # found in `markers` configuration option"). Fixed in
+    # vector-store/requirements.txt this phase; 30/30 passing, 89%
+    # coverage once fixed.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install deps
+        working-directory: vector-store
+        run: pip install -r requirements.txt
+
+      - name: Run unit tests
+        working-directory: vector-store
+        run: |
+          pytest tests/unit/ -v \
+            --cov=src \
+            --cov-report=xml \
+            --cov-fail-under=80 \
+            -q
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          file: vector-store/coverage.xml
+        continue-on-error: true
+
+  test-unit-rag-engine:
+    name: Unit Tests (rag-engine)
+    runs-on: ubuntu-latest
+    # New in Phase 11 (ADR-018). Same never-ran-in-CI gap. Verified
+    # clean locally, no issues found: 30/30 passing, 92% coverage.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install deps
+        working-directory: rag-engine
+        run: pip install -r requirements.txt
+
+      - name: Run unit tests
+        working-directory: rag-engine
+        run: |
+          pytest tests/unit/ -v \
+            --cov=src \
+            --cov-report=xml \
+            --cov-fail-under=80 \
+            -q
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          file: rag-engine/coverage.xml
+        continue-on-error: true
+
+  test-unit-embedding-server:
+    name: Unit Tests (embedding-server)
+    runs-on: ubuntu-latest
+    # New in Phase 11 (ADR-018). This job's history is the clearest
+    # argument for the other three above: embedding-server had zero CI
+    # wiring AND its only two "real" test files (test_clinical_bert_embedder.py,
+    # test_logging.py) were misplaced here from ingestion/ and
+    # api-gateway/ respectively, each importing a `src.*` module that
+    # only ever existed in the OTHER service. Reproduced locally: both
+    # failed with "ModuleNotFoundError: No module named 'src'" --
+    # 13 failed + 1 collection error out of what this directory reported
+    # as its own tests. Both relocated this phase (see ADR-018); what's
+    # left here is genuinely embedding-server's own: the HF deploy-script
+    # test. Not coverage-gated on scripts/ -- same as no other service
+    # gates its scripts/ directory, and this script's own real HF API
+    # calls make high unit coverage the wrong target here anyway.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install deps
+        working-directory: embedding-server
+        run: pip install pytest pytest-cov huggingface_hub python-dotenv
+
+      - name: Run unit tests
+        working-directory: embedding-server
+        run: pytest tests/unit/ -v -q
+
   test-integration:
     name: Integration Tests
     runs-on: ubuntu-latest
@@ -459,35 +599,86 @@ jobs:
             -- test the wrong thing.
           SQL
 
-      - name: Run integration tests
+      # Phase 11 / ADR-018 fix (pre-existing, unrelated to this phase's own
+      # scope beyond fixing it): this used to be one step --
+      # `pytest tests/integration/ -v -m integration` -- run with no
+      # working-directory. No root tests/integration/ exists anywhere in
+      # this repo (confirmed: only api-gateway/, ingestion/, vector-store/,
+      # and rag-engine/ each have their own tests/integration/), so that
+      # literal path could never resolve; the step would fail collection
+      # immediately on every run. Reproduced locally before fixing.
+      #
+      # This is deliberately 4 steps, not 1 combined `pytest a/ b/ c/ d/`
+      # invocation: api-gateway, ingestion, vector-store, and rag-engine
+      # each name their top-level package `src` -- running them through one
+      # pytest process risks exactly the cross-service `src` collision
+      # api-gateway/conftest.py's own docstring already documents (and
+      # works around, for its rag_engine/vector_store imports) from a
+      # prior phase. Separate cd-scoped steps, each resolving its own
+      # pytest.ini's `pythonpath = .` independently, sidesteps that
+      # entirely -- same pattern the Alembic step above already uses.
+      - name: Run integration tests (api-gateway)
+        working-directory: api-gateway
         env:
           DATABASE_URL: postgresql+asyncpg://pvh:pvh_local@localhost:5432/pvh
           DATABASE_URL_SYNC: postgresql+psycopg2://pvh:pvh_local@localhost:5432/pvh
           RLS_TEST_DATABASE_URL: postgresql+asyncpg://pvh_rls_test:pvh_rls_test@localhost:5432/pvh
           REDIS_URL: redis://localhost:6379/0
+          ENVIRONMENT: test
+          VAULT_ADDR: http://localhost:8200
+          VAULT_TOKEN: dev-root-token
+        run: pytest tests/integration/ -v -m integration --tb=short -q
+
+      - name: Run integration tests (ingestion)
+        working-directory: ingestion
+        env:
+          DATABASE_URL: postgresql+asyncpg://pvh:pvh_local@localhost:5432/pvh
+          DATABASE_URL_SYNC: postgresql+psycopg2://pvh:pvh_local@localhost:5432/pvh
           KAFKA_BROKERS: localhost:9092
+          WEAVIATE_HOST: localhost
+          WEAVIATE_PORT: "8080"
+          ENVIRONMENT: test
+          # OPENAI_API_KEY intentionally NOT set -- test_ingestion_end_to_end.py
+          # self-skips a real-embedding assertion when it's absent (see
+          # that file's pytestmark). Set as a repo secret to exercise it
+          # for real; incurs a small API cost per run.
+        run: pytest tests/integration/ -v -m integration --tb=short -q
+
+      - name: Run integration tests (vector-store)
+        working-directory: vector-store
+        env:
           WEAVIATE_HOST: localhost
           WEAVIATE_PORT: "8080"
           QDRANT_HOST: localhost
           QDRANT_PORT: "6333"
           ENVIRONMENT: test
-          # Phase 10 / ADR-017
-          VAULT_ADDR: http://localhost:8200
-          VAULT_TOKEN: dev-root-token
-          # OPENAI_API_KEY intentionally NOT set here -- the tests that
-          # need a real embedding or LLM call (test_ingestion_end_to_end.py,
-          # and Phase 7's test_rag_query_pipeline.py) self-skip when it's
-          # absent (see each file's pytestmark). Set OPENAI_API_KEY /
-          # ANTHROPIC_API_KEY as repo secrets if you want those specific
-          # tests to run in CI; each will incur a small real API cost per
-          # run.
-        run: |
-          pytest tests/integration/ -v -m integration --tb=short -q
+        run: pytest tests/integration/ -v -m integration --tb=short -q
+
+      - name: Run integration tests (rag-engine)
+        working-directory: rag-engine
+        env:
+          WEAVIATE_HOST: localhost
+          WEAVIATE_PORT: "8080"
+          QDRANT_HOST: localhost
+          QDRANT_PORT: "6333"
+          ENVIRONMENT: test
+          # ANTHROPIC_API_KEY intentionally NOT set -- test_rag_query_pipeline.py
+          # self-skips its real-LLM assertion when it's absent (see that
+          # file's pytestmark), same pattern as ingestion above.
+        run: pytest tests/integration/ -v -m integration --tb=short -q
 
   security-scan:
     name: Security Scan (Trivy)
     runs-on: ubuntu-latest
-    needs: [lint, test-unit]
+    needs:
+      [
+        lint,
+        test-unit,
+        test-unit-ingestion,
+        test-unit-vector-store,
+        test-unit-rag-engine,
+        test-unit-embedding-server,
+      ]
     steps:
       - uses: actions/checkout@v4
 
