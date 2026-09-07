@@ -191,3 +191,5 @@ class TestIsRetryableHfError:
         from src.embeddings.clinical_bert_embedder import _is_retryable_hf_error
 
         assert _is_retryable_hf_error(ValueError("not an HF error")) is False
+
+
