@@ -1,4 +1,23 @@
-"""Unit tests for structured JSON logging configuration."""
+"""Unit tests for structured JSON logging configuration.
+
+RELOCATED (Phase 11 prep): this file previously lived at
+embedding-server/tests/unit/test_logging.py, importing
+`src.logging_config` -- a module that only ever existed under
+api-gateway/src/, never under embedding-server/. It was uncollectible
+there (`ModuleNotFoundError: No module named 'src'` once embedding-
+server's own conftest correctly reported no local src/ directory) and,
+because embedding-server had zero CI wiring, that failure was never
+caught. Moved here, where api-gateway's own `pytest.ini`
+(`pythonpath = .`) resolves `src.logging_config` correctly.
+
+Moving it surfaced a second, independent bug: this file was also
+missing `import logging` and `import json`, used below. Both are real
+omissions in the test's own content, not artifacts of the move --
+proof this file had never actually been executed successfully before,
+regardless of location.
+"""
+import json
+import logging
 from io import StringIO
 from src.logging_config import JsonFormatter, configure_logging
 
@@ -71,3 +90,5 @@ class TestConfigureLogging:
         configure_logging("INFO")
         root = logging.getLogger()
         assert len(root.handlers) >= 1
+
+
