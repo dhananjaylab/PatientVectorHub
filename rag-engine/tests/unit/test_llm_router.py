@@ -189,3 +189,79 @@ class TestGeminiProvider:
 
         bad_request = errors.ClientError(400, {"error": {"message": "bad request"}})
         assert _is_retryable_gemini_error(bad_request) is False
+
+
+class TestMockProvider:
+    """Phase 11 / ADR-018 Stage 11.2 — Locust's zero-cost completion path."""
+
+    @pytest.mark.asyncio
+    async def test_mock_provider_returns_instantly_no_network(self, monkeypatch):
+        from src.config import settings
+        from src.llm_router import LLMRouter
+
+        monkeypatch.setattr(settings, "ENVIRONMENT", "development")
+        router = LLMRouter()
+        result = await router.complete("what is the diagnosis", provider="mock")
+        assert result.startswith("[MOCK RESPONSE")
+
+    @pytest.mark.asyncio
+    async def test_mock_provider_response_is_deterministic_per_prompt(self, monkeypatch):
+        from src.config import settings
+        from src.llm_router import LLMRouter
+
+        monkeypatch.setattr(settings, "ENVIRONMENT", "development")
+        router = LLMRouter()
+        first = await router.complete("prompt A", provider="mock")
+        second = await router.complete("prompt A", provider="mock")
+        third = await router.complete("prompt B", provider="mock")
+        assert first == second
+        assert first != third
+
+    @pytest.mark.asyncio
+    async def test_mock_provider_refused_in_production(self, monkeypatch):
+        from src.config import settings
+        from src.llm_router import LLMRouter
+
+        monkeypatch.setattr(settings, "ENVIRONMENT", "production")
+        router = LLMRouter()
+        with pytest.raises(ValueError, match="refused when ENVIRONMENT=production"):
+            await router.complete("prompt", provider="mock")
+
+    @pytest.mark.asyncio
+    async def test_mock_provider_allowed_in_staging(self, monkeypatch):
+        from src.config import settings
+        from src.llm_router import LLMRouter
+
+        # Only the literal string "production" is refused -- staging,
+        # test, and development environments (this project's actual
+        # ENVIRONMENT values elsewhere in the codebase) all allow it.
+        monkeypatch.setattr(settings, "ENVIRONMENT", "staging")
+        router = LLMRouter()
+        result = await router.complete("prompt", provider="mock")
+        assert result.startswith("[MOCK RESPONSE")
+
+
+class TestMockProviderBootGuard:
+    """Phase 11 / ADR-018 Stage 11.2 — config.py's model_post_init half of
+    the same safety gate, for a misconfigured *default* rather than a
+    per-request override."""
+
+    def test_boot_raises_when_mock_default_in_production(self, monkeypatch):
+        from src.config import RAGSettings
+
+        with pytest.raises(RuntimeError, match="LLM_DEFAULT_PROVIDER=mock"):
+            RAGSettings(
+                LLM_DEFAULT_PROVIDER="mock",
+                ENVIRONMENT="production",
+                ALLOW_REAL_PHI=False,
+            )
+
+    def test_boot_allows_mock_default_outside_production(self):
+        from src.config import RAGSettings
+
+        settings = RAGSettings(
+            LLM_DEFAULT_PROVIDER="mock",
+            ENVIRONMENT="development",
+            ALLOW_REAL_PHI=False,
+        )
+        assert settings.LLM_DEFAULT_PROVIDER == "mock"
