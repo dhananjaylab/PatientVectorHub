@@ -9,6 +9,8 @@ from urllib.parse import parse_qs, urlparse
 import asyncpg
 from dotenv import load_dotenv
 
+from src.config import normalize_asyncpg_url
+
 
 def mask_url(db_url: str) -> str:
     """Hide passwords before printing database URLs."""
@@ -31,7 +33,7 @@ async def test_connection():
 
     try:
         # asyncpg.connect does not accept SQLAlchemy driver names in URLs.
-        parsed = urlparse(db_url.replace("postgresql+asyncpg://", "postgresql://"))
+        parsed = urlparse(normalize_asyncpg_url(db_url))
         query_params = parse_qs(parsed.query)
 
         print(f"  Host: {parsed.hostname}:{parsed.port or 5432}")

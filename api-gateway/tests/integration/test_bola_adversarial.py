@@ -40,6 +40,8 @@ import pytest
 from dotenv import load_dotenv
 from httpx import ASGITransport, AsyncClient
 
+from src.config import normalize_asyncpg_url
+
 load_dotenv(Path(__file__).resolve().parents[3] / ".env")
 
 pytestmark = pytest.mark.integration
@@ -54,7 +56,7 @@ _RAW_URL = (
     or os.getenv("DATABASE_URL")
     or "postgresql+asyncpg://pvh:pvh_local@localhost:5432/pvh"
 )
-POSTGRES_URL = _RAW_URL.replace("postgresql+asyncpg://", "postgresql://")
+POSTGRES_URL = normalize_asyncpg_url(_RAW_URL)
 
 TENANT_A = str(uuid.uuid4())
 TENANT_B = str(uuid.uuid4())

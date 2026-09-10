@@ -25,10 +25,10 @@ from typing import AsyncIterator
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
-from ..config import settings
+from ..config import normalize_asyncpg_url, settings
 
 _engine: AsyncEngine = create_async_engine(
-    settings.DATABASE_URL,
+    normalize_asyncpg_url(settings.DATABASE_URL),
     pool_size=10,
     max_overflow=10,
     pool_pre_ping=True,
