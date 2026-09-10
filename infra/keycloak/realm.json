@@ -58,8 +58,16 @@
           }
         }
       ],
-      "defaultClientScopes": ["openid", "profile", "email", "roles"],
-      "optionalClientScopes": ["address", "phone"]
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email",
+        "roles"
+      ],
+      "optionalClientScopes": [
+        "address",
+        "phone"
+      ]
     },
     {
       "clientId": "pvh-backend",
@@ -74,7 +82,7 @@
     "realm": [
       {
         "name": "admin",
-        "description": "Full access within tenant — manage users, API keys, settings"
+        "description": "Full access within tenant \u2014 manage users, API keys, settings"
       },
       {
         "name": "engineer",
@@ -100,54 +108,147 @@
       "email": "admin@tenant1.test",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [{"type": "password", "value": "test-password-123", "temporary": false}],
-      "realmRoles": ["admin"],
-      "attributes": {"tenant_id": ["00000000-0000-0000-0000-000000000001"]}
+      "credentials": [
+        {
+          "type": "password",
+          "value": "test-password-123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "admin"
+      ],
+      "attributes": {
+        "tenant_id": [
+          "00000000-0000-0000-0000-000000000001"
+        ]
+      }
     },
     {
       "username": "engineer@tenant1.test",
       "email": "engineer@tenant1.test",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [{"type": "password", "value": "test-password-123", "temporary": false}],
-      "realmRoles": ["engineer"],
-      "attributes": {"tenant_id": ["00000000-0000-0000-0000-000000000001"]}
+      "credentials": [
+        {
+          "type": "password",
+          "value": "test-password-123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "engineer"
+      ],
+      "attributes": {
+        "tenant_id": [
+          "00000000-0000-0000-0000-000000000001"
+        ]
+      }
     },
     {
       "username": "analyst@tenant1.test",
       "email": "analyst@tenant1.test",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [{"type": "password", "value": "test-password-123", "temporary": false}],
-      "realmRoles": ["analyst"],
-      "attributes": {"tenant_id": ["00000000-0000-0000-0000-000000000001"]}
+      "credentials": [
+        {
+          "type": "password",
+          "value": "test-password-123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "analyst"
+      ],
+      "attributes": {
+        "tenant_id": [
+          "00000000-0000-0000-0000-000000000001"
+        ]
+      }
     },
     {
       "username": "auditor@tenant1.test",
       "email": "auditor@tenant1.test",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [{"type": "password", "value": "test-password-123", "temporary": false}],
-      "realmRoles": ["auditor"],
-      "attributes": {"tenant_id": ["00000000-0000-0000-0000-000000000001"]}
+      "credentials": [
+        {
+          "type": "password",
+          "value": "test-password-123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "auditor"
+      ],
+      "attributes": {
+        "tenant_id": [
+          "00000000-0000-0000-0000-000000000001"
+        ]
+      }
     },
     {
       "username": "admin@tenant2.test",
       "email": "admin@tenant2.test",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [{"type": "password", "value": "test-password-123", "temporary": false}],
-      "realmRoles": ["admin"],
-      "attributes": {"tenant_id": ["00000000-0000-0000-0000-000000000002"]}
+      "credentials": [
+        {
+          "type": "password",
+          "value": "test-password-123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "admin"
+      ],
+      "attributes": {
+        "tenant_id": [
+          "00000000-0000-0000-0000-000000000002"
+        ]
+      }
     },
     {
       "username": "engineer@tenant2.test",
       "email": "engineer@tenant2.test",
       "enabled": true,
       "emailVerified": true,
-      "credentials": [{"type": "password", "value": "test-password-123", "temporary": false}],
-      "realmRoles": ["engineer"],
-      "attributes": {"tenant_id": ["00000000-0000-0000-0000-000000000002"]}
+      "credentials": [
+        {
+          "type": "password",
+          "value": "test-password-123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "engineer"
+      ],
+      "attributes": {
+        "tenant_id": [
+          "00000000-0000-0000-0000-000000000002"
+        ]
+      }
+    },
+    {
+      "username": "readonly@tenant1.test",
+      "email": "readonly@tenant1.test",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "test-password-123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "readonly"
+      ],
+      "attributes": {
+        "tenant_id": [
+          "00000000-0000-0000-0000-000000000001"
+        ]
+      }
     }
   ],
   "passwordPolicy": "length(8)"
