@@ -12,6 +12,8 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 from dotenv import load_dotenv
 
+from src.config import normalize_asyncpg_url
+
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
@@ -29,10 +31,8 @@ if db_url:
         db_url = db_url.replace("postgresql+psycopg2", "postgresql+asyncpg")
     elif "postgresql://" in db_url and "+" not in db_url:
         db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
-    
-    # Remove sslmode from URL — we'll handle SSL explicitly
-    if "sslmode=" in db_url:
-        db_url = db_url.split("?")[0]
+
+    db_url = normalize_asyncpg_url(db_url)
 
 config.set_main_option("sqlalchemy.url", db_url)
 

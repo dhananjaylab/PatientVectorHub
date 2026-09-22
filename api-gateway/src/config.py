@@ -43,9 +43,51 @@ Phase 10 additions (Observability & Security):
   invented for this phase.
 """
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def normalize_asyncpg_url(raw_url: str) -> str:
+    """Strip SSL query params while preserving the asyncpg driver.
+
+    Aiven and similar Postgres providers often provide DSNs like
+    ``...?ssl=require``. asyncpg accepts SSL via the connection call itself
+    (or a custom SSL context), not by reusing a URL whose query string
+    redefines the same runtime parameter after the socket is already open.
+    The async SQLAlchemy engine must keep the ``+asyncpg`` driver prefix;
+    dropping it turns the URL back into the sync psycopg2 path and causes
+    ``InvalidRequestError: The asyncio extension requires an async driver``.
+    """
+    if not raw_url:
+        return raw_url
+
+    url = raw_url.strip()
+    if "postgresql+asyncpg://" in url:
+        normalized_scheme = "postgresql+asyncpg"
+        url = url.replace("postgresql+asyncpg://", f"{normalized_scheme}://", 1)
+    elif "postgresql+psycopg2://" in url:
+        normalized_scheme = "postgresql+asyncpg"
+        url = url.replace("postgresql+psycopg2://", f"{normalized_scheme}://", 1)
+    elif "postgresql://" in url:
+        normalized_scheme = "postgresql+asyncpg"
+        url = url.replace("postgresql://", f"{normalized_scheme}://", 1)
+    else:
+        return raw_url.strip()
+
+    parsed = urlsplit(url)
+    if parsed.scheme not in {"postgresql", "postgresql+asyncpg"}:
+        return raw_url.strip()
+
+    params = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    for key in ("ssl", "sslmode"):
+        params.pop(key, None)
+
+    clean_query = urlencode(params, doseq=True)
+    return urlunsplit(
+        ("postgresql+asyncpg", parsed.netloc, parsed.path, clean_query, parsed.fragment)
+    )
 
 
 class Settings(BaseSettings):
@@ -177,14 +219,17 @@ class Settings(BaseSettings):
         return self.ENVIRONMENT in ("development", "dev")
 
     @model_validator(mode="after")
-    def _resolve_ssl_paths(self):
-        """Resolve relative certificate paths against the repo root.
+    def _normalize_runtime_settings(self):
+        """Normalize environment-driven runtime settings.
 
-        The project stores certs under the repo-level /certs folder, while
-        .env entries like `certs\ca.pem` are typically written relative to the
-        repository root rather than the API gateway subdirectory. Without this,
-        startup fails with FileNotFoundError even though the cert exists.
+        1. Strip SSL query params from asyncpg DSNs before they are handed to
+           asyncpg, because `ssl`/`sslmode` are runtime connection parameters and
+           asyncpg rejects changing them after connection setup.
+        2. Resolve relative cert paths against the repo root.
+        3. Normalize Keycloak endpoints from the base URL + realm pair.
         """
+        self.DATABASE_URL = normalize_asyncpg_url(self.DATABASE_URL)
+
         repo_root = Path(__file__).resolve().parents[2]
         for field in ("KAFKA_SSL_CAFILE", "KAFKA_SSL_CERTFILE", "KAFKA_SSL_KEYFILE"):
             value = getattr(self, field, "")

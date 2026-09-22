@@ -109,6 +109,17 @@ class RAGSettings(BaseSettings):
                 "sends analyst query text to the same third-party providers — see "
                 "ADR-009, ADR-012, and docs/adr/ADR-014-rag-query-engine.md §5."
             )
+        # Phase 11 / ADR-018 Stage 11.2: catches a misconfigured default
+        # provider at boot, before any request can hit it. A per-request
+        # override reaching production is caught separately, at call
+        # time, in llm_router.py's complete().
+        if self.LLM_DEFAULT_PROVIDER == "mock" and self.ENVIRONMENT == "production":
+            raise RuntimeError(
+                "LLM_DEFAULT_PROVIDER=mock with ENVIRONMENT=production would let "
+                "every unspecified-provider query return a canned answer to a "
+                "real clinical question. This is a load-test-only setting — see "
+                "docs/adr/ADR-018 Stage 11.2 and tests/load/locustfile.py."
+            )
 
 
 settings = RAGSettings()

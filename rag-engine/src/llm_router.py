@@ -61,9 +61,46 @@ class LLMRouter:
             return await _complete_openai(prompt, max_tokens)
         if provider == "gemini":
             return await _complete_gemini(prompt, max_tokens)
+        if provider == "mock":
+            # Phase 11 / ADR-018 Stage 11.2 -- Locust's QueryUser needs a
+            # zero-latency, zero-cost completion path so load results
+            # measure this service's own retrieval+dispatch overhead, not
+            # a real provider's rate limits or network variance (the
+            # brainstorm doc's own risk register named exactly this:
+            # "LLM API rate limits cause flaky load tests").
+            #
+            # Hard-refused outside load-test environments on purpose: this
+            # is a clinical RAG system, so a canned answer silently
+            # reaching a real clinical question is a patient-safety
+            # concern, not just a wrong test result. The companion guard
+            # in config.py's model_post_init catches a misconfigured
+            # LLM_DEFAULT_PROVIDER=mock at boot; this one catches a
+            # per-request override reaching the same environment.
+            if settings.ENVIRONMENT == "production":
+                raise ValueError(
+                    "llm_provider='mock' is refused when ENVIRONMENT=production "
+                    "-- see rag-engine/src/llm_router.py's docstring."
+                )
+            return await _complete_mock(prompt, max_tokens)
         raise ValueError(
-            f"Unknown llm_provider={provider!r} — expected 'anthropic', 'openai', or 'gemini'."
+            f"Unknown llm_provider={provider!r} — expected 'anthropic', 'openai', "
+            "'gemini', or 'mock' (non-production only)."
         )
+
+
+# ── Mock (Phase 11 / ADR-018 load-test only) ───────────────────────────────
+
+
+async def _complete_mock(prompt: str, max_tokens: int) -> str:
+    # No network call, no retry/backoff needed -- that's the point. Echoes
+    # a short hash of the prompt (not the prompt itself, which may embed
+    # retrieved PHI-adjacent chunk text) so distinct queries in a Locust
+    # run produce distinguishable answers, useful for spotting a caching
+    # bug that returns the same answer for every query.
+    import hashlib
+
+    digest = hashlib.sha256(prompt.encode()).hexdigest()[:8]
+    return f"[MOCK RESPONSE — load-test only, ref {digest}]"
 
 
 # ── Anthropic (default) ─────────────────────────────────────────────────────

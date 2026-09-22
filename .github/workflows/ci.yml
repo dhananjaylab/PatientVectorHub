@@ -5,6 +5,15 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+  # Phase 11 / ADR-018 Stage 11.3: needed for the new e2e job below,
+  # which runs on manual trigger only (confirmed decision -- the full
+  # docker-compose-equivalent stack this needs is real cost, not
+  # something to run on every PR). Every other job below keeps running
+  # on its existing push/pull_request triggers regardless of this
+  # addition; a manual dispatch of this workflow runs everything,
+  # e2e included, which is the expected "run the full pipeline" reading
+  # of triggering it by hand.
+  workflow_dispatch: {}
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -209,10 +218,10 @@ jobs:
           ANTHROPIC_API_KEY: sk-ant-test-not-a-real-key
           GEMINI_API_KEY: test-not-a-real-gemini-key
         run: |
-          pytest tests/unit/ -v \
+          pytest tests/unit/ tests/security/ -v \
             --cov=src \
             --cov-report=xml \
-            --cov-fail-under=60 \
+            --cov-fail-under=80 \
             -q
 
       - name: Upload coverage
@@ -666,6 +675,407 @@ jobs:
           # self-skips its real-LLM assertion when it's absent (see that
           # file's pytestmark), same pattern as ingestion above.
         run: pytest tests/integration/ -v -m integration --tb=short -q
+
+  e2e:
+    name: E2E (Playwright, role-diverse)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    needs: [test-unit, dashboard-test]
+    # Phase 11 / ADR-018 Stage 11.3. Confirmed decision: manual trigger
+    # only -- this needs the equivalent of the full docker-compose
+    # stack running inside the runner (infra + api-gateway + a real
+    # Keycloak + the built dashboard), real cost not worth paying on
+    # every PR. Structurally different from test-integration: that job
+    # stands up infra dependencies for in-process test code; this one
+    # needs the actual running application, reachable by a real
+    # browser.
+    #
+    # VERIFICATION STATUS: dashboard/e2e/auth.setup.ts,
+    # playwright.config.ts, and rbac-navigation.spec.ts were all
+    # verified this phase with real `tsc --noEmit` (against the config
+    # that actually covers e2e/**, tsconfig.node.json -- the main
+    # tsconfig.json doesn't) and real `npx playwright test --list`
+    # (27 tests across 4 files, correctly scoped per project, zero
+    # collection errors -- caught and fixed a real ESM __dirname bug
+    # doing this). The full login flow against a live Keycloak was
+    # NOT executed -- no Docker available in the sandbox this phase's
+    # verification ran in. Run once for real before trusting this job.
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: pvh
+          POSTGRES_PASSWORD: pvh_local
+          POSTGRES_DB: pvh
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      weaviate:
+        image: semitechnologies/weaviate:1.24.1
+        ports:
+          - 8080:8080
+          - 50051:50051
+        env:
+          AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+          PERSISTENCE_DATA_PATH: /var/lib/weaviate
+          DEFAULT_VECTORIZER_MODULE: none
+          CLUSTER_HOSTNAME: weaviate-ci
+        options: >-
+          --health-cmd "wget -qO- http://localhost:8080/v1/.well-known/ready"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+      qdrant:
+        image: qdrant/qdrant:v1.8.1
+        ports:
+          - 6333:6333
+          - 6334:6334
+        options: >-
+          --health-cmd "wget -qO- http://localhost:6333/healthz"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+      vault:
+        image: hashicorp/vault:1.15
+        ports:
+          - 8200:8200
+        env:
+          VAULT_DEV_ROOT_TOKEN_ID: dev-root-token
+          VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+        options: >-
+          --cap-add=IPC_LOCK
+          --health-cmd "vault status -address=http://127.0.0.1:8200"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      ENVIRONMENT: test
+      DATABASE_URL: postgresql+asyncpg://pvh:pvh_local@localhost:5432/pvh
+      REDIS_URL: redis://localhost:6379/0
+      WEAVIATE_HOST: localhost
+      WEAVIATE_PORT: "8080"
+      QDRANT_HOST: localhost
+      QDRANT_PORT: "6333"
+      VAULT_ADDR: http://localhost:8200
+      VAULT_TOKEN: dev-root-token
+      AUTH_ENABLED: "true"
+      LLM_DEFAULT_PROVIDER: mock
+      KEYCLOAK_BASE_URL: http://localhost:8443
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Install api-gateway + rag-engine + vector-store deps
+        run: |
+          pip install -r api-gateway/requirements.txt
+          pip install -r rag-engine/requirements.txt
+          pip install -r vector-store/requirements.txt
+          pip install requests  # infra/keycloak/import_realm.py
+
+      - name: Start Keycloak
+        # docker run, not a `services:` block -- GitHub Actions service
+        # containers don't support command overrides, and this image
+        # needs `start-dev` as an explicit argument (confirmed from
+        # docker-compose.yml's own `command: start-dev --import-realm`).
+        run: |
+          docker run -d --name keycloak --network host \
+            -e KEYCLOAK_ADMIN=admin \
+            -e KEYCLOAK_ADMIN_PASSWORD=admin_local \
+            -e KC_HTTP_ENABLED=true \
+            -e KC_HOSTNAME_STRICT=false \
+            -e KC_HTTP_PORT=8443 \
+            quay.io/keycloak/keycloak:24.0 start-dev
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8443/health/ready && break
+            sleep 3
+          done
+
+      - name: Import realm
+        run: python infra/keycloak/import_realm.py
+
+      - name: Run Alembic migrations
+        working-directory: api-gateway
+        run: python -m alembic upgrade head
+
+      - name: Seed tenants and users
+        run: python infra/scripts/seed_data.py
+
+      - name: Set up Weaviate and Qdrant collections
+        run: |
+          python vector-store/scripts/setup_weaviate_schema.py
+          python vector-store/scripts/setup_qdrant_schema.py
+
+      - name: Start api-gateway
+        working-directory: api-gateway
+        run: |
+          nohup uvicorn src.main:app --host 0.0.0.0 --port 8000 > /tmp/api-gateway.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8000/health && break
+            sleep 1
+          done
+          curl -sf http://localhost:8000/health || (cat /tmp/api-gateway.log && exit 1)
+
+      - name: Install dashboard deps
+        working-directory: dashboard
+        run: npm ci --legacy-peer-deps
+
+      - name: Install Playwright browsers
+        working-directory: dashboard
+        run: npx playwright install --with-deps chromium
+
+      - name: Build and preview dashboard
+        working-directory: dashboard
+        env:
+          VITE_AUTH_ENABLED: "true"
+          VITE_KEYCLOAK_URL: http://localhost:8443
+          VITE_KEYCLOAK_REALM: patientvectorhub
+          VITE_KEYCLOAK_CLIENT_ID: pvh-spa
+        run: |
+          npm run build
+          nohup npm run preview -- --port 5173 > /tmp/dashboard.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:5173 && break
+            sleep 1
+          done
+
+      - name: Run Playwright (role-diverse projects only)
+        working-directory: dashboard
+        env:
+          PVH_E2E_BASE_URL: http://localhost:5173
+        run: |
+          npx playwright test \
+            --project=setup --project=admin --project=engineer \
+            --project=analyst --project=auditor --project=readonly
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: dashboard/playwright-report/
+
+  load-test:
+    name: Load Test (dispatch rate)
+    runs-on: ubuntu-latest
+    needs: [test-unit, test-unit-ingestion]
+    # Phase 11 / ADR-018 Stage 11.2. Confirmed decision: measure
+    # dispatch-to-Kafka throughput here, on a real cadence, rather than
+    # only locally/nightly -- see docs/PHASE_11_IMPLEMENTATION_PLAN.md's
+    # 5,000 docs/sec extrapolation methodology for how the full
+    # end-to-end production number (celery-worker's docker-compose
+    # concurrency of 4 makes that unreachable on this runner) relates
+    # to what this job actually gates on.
+    #
+    # VERIFICATION STATUS: locustfile.py and check_dispatch_rate.py
+    # were both run for real this phase, against a stub HTTP server
+    # standing in for these two routes -- confirmed clean (0% failures,
+    # correct req/s computation, confirmed the gate script's own
+    # pass/fail paths). Booting the real api-gateway via uvicorn in
+    # this exact GitHub Actions shape (below) was written and reviewed
+    # against the real code (sitecustomize.py's cross-service import
+    # mechanism, deps.py's AUTH_ENABLED requirement for the X-API-Key
+    # path) but NOT executed -- no Docker/Postgres was available in the
+    # sandbox this phase's other verification ran in. Run once for real
+    # before trusting this job blindly.
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: pvh
+          POSTGRES_PASSWORD: pvh_local
+          POSTGRES_DB: pvh
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      kafka:
+        image: apache/kafka:3.6.0
+        ports:
+          - 9092:9092
+        env:
+          KAFKA_NODE_ID: 1
+          KAFKA_PROCESS_ROLES: broker,controller
+          KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+          KAFKA_CONTROLLER_QUORUM_VOTERS: "1@localhost:9093"
+          KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+          KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+          KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+          CLUSTER_ID: pvh-ci-cluster-id-002
+        options: >-
+          --health-cmd "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 12
+      weaviate:
+        image: semitechnologies/weaviate:1.24.1
+        ports:
+          - 8080:8080
+          - 50051:50051
+        env:
+          AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+          PERSISTENCE_DATA_PATH: /var/lib/weaviate
+          DEFAULT_VECTORIZER_MODULE: none
+          CLUSTER_HOSTNAME: weaviate-ci
+        options: >-
+          --health-cmd "wget -qO- http://localhost:8080/v1/.well-known/ready"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+      qdrant:
+        image: qdrant/qdrant:v1.8.1
+        ports:
+          - 6333:6333
+          - 6334:6334
+        options: >-
+          --health-cmd "wget -qO- http://localhost:6333/healthz"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+      vault:
+        image: hashicorp/vault:1.15
+        ports:
+          - 8200:8200
+        env:
+          VAULT_DEV_ROOT_TOKEN_ID: dev-root-token
+          VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+        options: >-
+          --cap-add=IPC_LOCK
+          --health-cmd "vault status -address=http://127.0.0.1:8200"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      ENVIRONMENT: test  # NOT production -- see llm_router.py's mock-provider gate
+      DATABASE_URL: postgresql+asyncpg://pvh:pvh_local@localhost:5432/pvh
+      REDIS_URL: redis://localhost:6379/0
+      KAFKA_BROKERS: localhost:9092
+      WEAVIATE_HOST: localhost
+      WEAVIATE_PORT: "8080"
+      QDRANT_HOST: localhost
+      QDRANT_PORT: "6333"
+      VAULT_ADDR: http://localhost:8200
+      VAULT_TOKEN: dev-root-token
+      AUTH_ENABLED: "true"  # required for the X-API-Key path -- see deps.py
+      LLM_DEFAULT_PROVIDER: mock  # rag-engine/src/config.py -- refused outright if ENVIRONMENT=production
+      KEYCLOAK_BASE_URL: http://keycloak.invalid  # never actually contacted -- API-key requests short-circuit before touching JWKS (see auth.py's dispatch())
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install api-gateway deps
+        working-directory: api-gateway
+        run: pip install -r requirements.txt
+
+      - name: Install rag-engine + vector-store deps
+        # api-gateway's own sitecustomize.py adds these sibling src/
+        # dirs to sys.path at interpreter startup -- their own
+        # dependencies still need installing into the same environment.
+        run: |
+          pip install -r rag-engine/requirements.txt
+          pip install -r vector-store/requirements.txt
+
+      - name: Install Locust
+        run: pip install locust==2.46.4
+
+      - name: Run Alembic migrations
+        working-directory: api-gateway
+        run: python -m alembic upgrade head
+
+      - name: Seed one tenant and capture the API key
+        id: seed
+        run: |
+          python infra/scripts/seed_data.py | tee /tmp/seed_output.log
+          key=$(grep "Acme Health" /tmp/seed_output.log | awk '{print $NF}')
+          if [ -z "$key" ]; then
+            echo "::error::Could not parse seeded API key from seed_data.py output"
+            exit 1
+          fi
+          echo "api_key=$key" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Weaviate and Qdrant collections
+        run: |
+          python vector-store/scripts/setup_weaviate_schema.py
+          python vector-store/scripts/setup_qdrant_schema.py
+
+      - name: Start api-gateway
+        working-directory: api-gateway
+        run: |
+          nohup uvicorn src.main:app --host 0.0.0.0 --port 8000 > /tmp/api-gateway.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8000/health && break
+            sleep 1
+          done
+          curl -sf http://localhost:8000/health || (cat /tmp/api-gateway.log && exit 1)
+
+      - name: Run Locust (dispatch-rate check)
+        env:
+          PVH_LOAD_TEST_API_KEY: ${{ steps.seed.outputs.api_key }}
+        run: |
+          mkdir -p tests/load/results
+          locust -f tests/load/locustfile.py --headless \
+            --host http://localhost:8000 \
+            --users 50 --spawn-rate 10 --run-time 60s \
+            --csv tests/load/results/dispatch_rate
+
+      - name: Enforce dispatch-rate gate
+        run: |
+          python tests/load/check_dispatch_rate.py \
+            tests/load/results/dispatch_rate_stats.csv \
+            --run-time-seconds 60 \
+            --min-dispatch-rate 20 \
+            --max-failure-pct 5.0
+
+      - name: Upload Locust results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: locust-dispatch-rate-results
+          path: tests/load/results/
 
   security-scan:
     name: Security Scan (Trivy)

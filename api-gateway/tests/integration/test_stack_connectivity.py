@@ -12,6 +12,8 @@ import pytest
 from pathlib import Path
 from dotenv import load_dotenv
 
+from src.config import normalize_asyncpg_url
+
 # Load .env file from project root
 env_path = Path(__file__).resolve().parents[3] / ".env"
 load_dotenv(env_path)
@@ -47,7 +49,7 @@ class TestPostgresConnectivity:
     async def test_postgres_reachable(self):
         import asyncpg
         conn = await asyncpg.connect(
-            POSTGRES_URL.replace("postgresql+asyncpg://", "postgresql://")
+            normalize_asyncpg_url(POSTGRES_URL)
         )
         result = await conn.fetchval("SELECT 1")
         await conn.close()
@@ -57,7 +59,7 @@ class TestPostgresConnectivity:
     async def test_postgres_pvh_database_exists(self):
         import asyncpg
         conn = await asyncpg.connect(
-            POSTGRES_URL.replace("postgresql+asyncpg://", "postgresql://")
+            normalize_asyncpg_url(POSTGRES_URL)
         )
         expected_db = _database_name_from_url(POSTGRES_URL)
         row = await conn.fetchrow(

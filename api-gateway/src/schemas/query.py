@@ -26,7 +26,7 @@ class QueryRequest(BaseModel):
     query_text: str = Field(..., min_length=3, max_length=2000)
     filters: QueryFilters | None = None
     top_k: int = Field(default=10, ge=1, le=50)
-    llm_provider: str | None = Field(default=None, pattern="^(openai|anthropic|gemini)$")
+    llm_provider: str | None = Field(default=None, pattern="^(openai|anthropic|gemini|mock)$")
 
 
 class QueryResultItem(BaseModel):

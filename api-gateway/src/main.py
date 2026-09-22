@@ -49,7 +49,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 
-from .config import settings
+from .config import normalize_asyncpg_url, settings
 from .errors import PVHError, pvh_exception_handler
 from .logging_config import configure_logging
 from .middleware.rate_limit import limiter, rate_limit_exceeded_handler
@@ -117,7 +117,7 @@ async def lifespan(app: FastAPI):
         import asyncpg
 
         app.state.db_pool = await asyncpg.create_pool(
-            settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://"),
+            normalize_asyncpg_url(settings.DATABASE_URL),
             min_size=1,
             max_size=5,
             command_timeout=5,

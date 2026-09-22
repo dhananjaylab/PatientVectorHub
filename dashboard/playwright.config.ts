@@ -31,7 +31,64 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+      // Phase 11 / ADR-018 Stage 11.3: explicitly scoped to the specs
+      // that predate role-diverse auth, now that rbac-navigation.spec.ts
+      // exists alongside them in the same testDir. Without this,
+      // chromium's default (unrestricted) testMatch would also collect
+      // rbac-navigation.spec.ts and run its per-role assertions against
+      // an AUTH_ENABLED=false session that is always readonly regardless
+      // of which role project name Playwright thinks it's running under
+      // -- every non-readonly assertion in that file would fail for a
+      // reason that has nothing to do with RBAC actually being broken.
+      testMatch: ['dashboard.spec.ts', 'navigation.spec.ts'],
+    },
+    // Phase 11 / ADR-018 Stage 11.3 -- role-diverse coverage, additive
+    // to the 'chromium' project above (which keeps running the
+    // existing AUTH_ENABLED=false specs unchanged). These 5 projects
+    // only run when the target stack has VITE_AUTH_ENABLED=true and a
+    // real Keycloak reachable -- not meaningful against the plain
+    // `npm run dev` webServer this config starts by default, so they
+    // require PVH_E2E_BASE_URL pointed at a real auth-enabled stack
+    // (see the new e2e CI job, workflow_dispatch only).
+    {
+      name: 'setup',
+      testMatch: /auth\.setup\.ts/,
+    },
+    {
+      name: 'admin',
+      use: { ...devices['Desktop Chrome'], storageState: 'e2e/.auth/admin.json' },
+      dependencies: ['setup'],
+      testMatch: 'rbac-navigation.spec.ts',
+    },
+    {
+      name: 'engineer',
+      use: { ...devices['Desktop Chrome'], storageState: 'e2e/.auth/engineer.json' },
+      dependencies: ['setup'],
+      testMatch: 'rbac-navigation.spec.ts',
+    },
+    {
+      name: 'analyst',
+      use: { ...devices['Desktop Chrome'], storageState: 'e2e/.auth/analyst.json' },
+      dependencies: ['setup'],
+      testMatch: 'rbac-navigation.spec.ts',
+    },
+    {
+      name: 'auditor',
+      use: { ...devices['Desktop Chrome'], storageState: 'e2e/.auth/auditor.json' },
+      dependencies: ['setup'],
+      testMatch: 'rbac-navigation.spec.ts',
+    },
+    {
+      name: 'readonly',
+      use: { ...devices['Desktop Chrome'], storageState: 'e2e/.auth/readonly.json' },
+      dependencies: ['setup'],
+      testMatch: 'rbac-navigation.spec.ts',
+    },
+  ],
   // Starts the Vite dev server automatically for local runs; in CI this
   // is skipped in favor of an explicitly-started stack (see the future
   // e2e workflow job referenced above) so Playwright doesn't try to
