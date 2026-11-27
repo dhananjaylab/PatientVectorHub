@@ -44,8 +44,13 @@ jobs:
 
       - name: MyPy
         run: |
-          mypy api-gateway/src ingestion/src rag-engine/src vector-store/src \
-            --ignore-missing-imports
+          # Each service has a local `src` package. Check them in separate
+          # invocations with incremental caching disabled so mypy does not
+          # assign them the same module name or reuse another service's cache.
+          mypy --no-incremental api-gateway/src --ignore-missing-imports
+          mypy --no-incremental ingestion/src --ignore-missing-imports
+          mypy --no-incremental rag-engine/src --ignore-missing-imports
+          mypy --no-incremental vector-store/src --ignore-missing-imports
 
       # Phase 9: bumped 20 -> 22. react-router@8 (dashboard/package.json)
       # hard-requires Node >=22.22.0 -- `npm ci` fails dependency

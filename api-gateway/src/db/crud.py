@@ -148,7 +148,7 @@ async def revoke_api_key(db: AsyncSession, key_id: str) -> bool:
         ),
         {"id": key_id},
     )
-    return result.rowcount > 0
+    return result.scalar_one_or_none() is not None
 
 
 async def list_api_keys(db: AsyncSession) -> list[dict]:
@@ -347,11 +347,12 @@ async def create_document(
 
 
 async def count_documents_for_patient(db: AsyncSession, patient_id: str) -> int:
-    return (
+    count = (
         await db.execute(
             text("SELECT COUNT(*) FROM documents WHERE patient_id = :pid"), {"pid": patient_id}
         )
-    ).scalar()
+    ).scalar_one()
+    return int(count)
 
 
 # ── Audit logs (INSERT + SELECT only — see models.AuditLog docstring) ──────

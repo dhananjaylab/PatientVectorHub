@@ -128,6 +128,8 @@ async def create_job(
     )
 
     created = await crud.get_ingestion_job(db, job_id=job_id)
+    if created is None:
+        raise HTTPException(status_code=500, detail="Created ingestion job could not be retrieved")
     return _to_response(created)
 
 
