@@ -17,6 +17,35 @@ def test_seed_data_reset_clears_known_tenant_rows() -> None:
     assert conn.execute.call_count >= 4
 
 
+def test_get_database_url_converts_ssl_to_psycopg2_sslmode(monkeypatch):
+    monkeypatch.setenv(
+        "DATABASE_URL_SYNC",
+        "postgresql+psycopg2://user:pass@db.example/test?ssl=require&application_name=seed",
+    )
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+    url = seed_data.get_database_url()
+
+    assert url == (
+        "postgresql+psycopg2://user:pass@db.example/test"
+        "?application_name=seed&sslmode=require&connect_timeout=10"
+        "&options=-c+statement_timeout%3D30000"
+    )
+
+
+def test_get_database_url_preserves_explicit_sslmode_over_ssl_alias(monkeypatch):
+    monkeypatch.setenv(
+        "DATABASE_URL_SYNC",
+        "postgresql://user:pass@db.example/test?ssl=require&sslmode=verify-full",
+    )
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+    url = seed_data.get_database_url()
+
+    assert "ssl=" not in url
+    assert "sslmode=verify-full" in url
+
+
 class TestResolveMrn:
     """Phase 10 / ADR-017."""
 

@@ -1,6 +1,6 @@
 """Focused regression tests for api-gateway/src/config.py."""
 
-from src.config import Settings, normalize_asyncpg_url
+from src.config import Settings, normalize_asyncpg_url, normalize_asyncpg_pool_url
 
 
 def test_normalize_asyncpg_url_preserves_async_driver_and_strips_ssl_runtime_params():
@@ -14,6 +14,14 @@ def test_normalize_asyncpg_url_preserves_async_driver_and_strips_ssl_runtime_par
     assert normalized == (
         "postgresql+asyncpg://user:pass@host:5432/db?application_name=api"
     )
+
+
+def test_normalize_asyncpg_pool_url_uses_plain_postgresql_scheme():
+    normalized = normalize_asyncpg_pool_url(
+        "postgresql+asyncpg://user:pass@host:5432/db?ssl=require"
+    )
+
+    assert normalized == "postgresql://user:pass@host:5432/db"
 
 
 class TestKeycloakSettings:
