@@ -1101,7 +1101,8 @@ jobs:
         run: docker build -f api-gateway/Dockerfile -t pvh-api:${{ github.sha }} .
 
       - name: Trivy vulnerability scan
-        uses: aquasecurity/trivy-action@master
+        # Pinned to v0.35.0 by commit SHA, not the @master floating tag.
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
           image-ref: pvh-api:${{ github.sha }}
           severity: CRITICAL
@@ -1112,7 +1113,8 @@ jobs:
         run: docker build -f ingestion/Dockerfile -t pvh-ingestion:${{ github.sha }} .
 
       - name: Trivy scan ingestion
-        uses: aquasecurity/trivy-action@master
+        # Pinned to v0.35.0 by commit SHA, not the @master floating tag.
+        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
           image-ref: pvh-ingestion:${{ github.sha }}
           severity: CRITICAL
