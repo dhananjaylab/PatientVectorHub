@@ -37,6 +37,14 @@ aiokafka>=0.12.0,<0.13.0
 # extra required). See middleware/rate_limit.py.
 slowapi>=0.1.10,<0.2.0
 
+# ── RAG query providers (Phase 7) ────────────────────────────────────────────
+# The API gateway serves rag-engine code in-process via /v1/query, so these
+# provider SDKs must be available in the gateway's own virtualenv.
+openai>=1.50.0,<2.0.0
+huggingface_hub>=1.24.0,<1.25.0
+anthropic>=0.120.0,<0.121.0
+google-genai>=2.14.0,<3.0.0
+
 # ── Secrets (Phase 10) ───────────────────────────────────────────────────────
 # 2.4.0's breaking changes (see changelog) are carried over from the 2.0.0
 # major bump (Client.write() behavior, dropped EOL Python support, removed
@@ -69,7 +77,7 @@ tenacity>=9.0.0,<10.0.0
 # Used by integration tests for connectivity checks
 redis>=5.0.0,<6.0.0
 weaviate-client>=4.0.0,<5.0.0
-qdrant-client>=1.18.0,<1.19.0
+qdrant-client>=1.20.0,<1.21.0
 
 # Test framework
 pytest>=8.0.0,<9.0.0

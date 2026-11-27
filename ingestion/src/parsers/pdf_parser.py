@@ -5,6 +5,7 @@ Import note: `import pymupdf` is the current recommended import — the
 legacy `import fitz` alias still works identically but new code should
 prefer `pymupdf` (see docs/PHASE_4_IMPLEMENTATION_PLAN.md footnote [1]).
 """
+
 import pymupdf
 
 from .r2_client import get_object_bytes

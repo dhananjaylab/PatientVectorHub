@@ -18,6 +18,7 @@ users.role are plain strings) and avoids the ALTER TYPE ... ADD VALUE
 ordering headaches Postgres enums bring later. Application-level validation
 happens via the Literal/Enum types in schemas/*.py.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -95,7 +96,7 @@ class Patient(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
-    documents: Mapped[list["Document"]] = relationship(back_populates="patient")
+    documents: Mapped[list[Document]] = relationship(back_populates="patient")
 
 
 class IngestionJob(Base):
@@ -109,13 +110,9 @@ class IngestionJob(Base):
     source_type: Mapped[str] = mapped_column(String(32), nullable=False)
     source_config: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
     doc_count_total: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0")
-    doc_count_processed: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, server_default="0"
-    )
+    doc_count_processed: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0")
     doc_count_failed: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0")
-    created_by: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id")
-    )
+    created_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"))
     tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False
     )
@@ -126,7 +123,7 @@ class IngestionJob(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
-    documents: Mapped[list["Document"]] = relationship(back_populates="ingestion_job")
+    documents: Mapped[list[Document]] = relationship(back_populates="ingestion_job")
 
 
 class Document(Base):
@@ -157,8 +154,8 @@ class Document(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
-    patient: Mapped["Patient"] = relationship(back_populates="documents")
-    ingestion_job: Mapped["IngestionJob | None"] = relationship(back_populates="documents")
+    patient: Mapped[Patient] = relationship(back_populates="documents")
+    ingestion_job: Mapped[IngestionJob | None] = relationship(back_populates="documents")
 
 
 class ApiKey(Base):

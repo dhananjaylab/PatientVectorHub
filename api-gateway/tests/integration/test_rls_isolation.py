@@ -27,13 +27,13 @@ either skip forever (if the bypass check is correct) or produce a
 false failure (if it isn't) — neither actually exercises the policy.
 RLS_TEST_DATABASE_URL is how CI gets a real, non-bypassing signal.
 """
+
 import os
 import uuid
 from pathlib import Path
 
-from dotenv import load_dotenv
 import pytest
-
+from dotenv import load_dotenv
 from src.config import normalize_asyncpg_url
 
 load_dotenv(Path(__file__).resolve().parents[3] / ".env")
@@ -43,7 +43,7 @@ pytestmark = pytest.mark.integration
 # Skip entire module if SKIP_INTEGRATION_TESTS is set
 skip_integration = pytest.mark.skipif(
     os.getenv("SKIP_INTEGRATION_TESTS", "").lower() in ("true", "1", "yes"),
-    reason="Integration tests skipped (SKIP_INTEGRATION_TESTS=true)"
+    reason="Integration tests skipped (SKIP_INTEGRATION_TESTS=true)",
 )
 
 _RAW_URL = (
@@ -56,22 +56,29 @@ POSTGRES_URL = normalize_asyncpg_url(_RAW_URL)
 TENANT_A = str(uuid.uuid4())
 TENANT_B = str(uuid.uuid4())
 
+
 async def _make_tenant(conn, tenant_id: str, name: str) -> None:
     await conn.execute(
         "INSERT INTO tenants (id, name, namespace, plan, created_at) "
         "VALUES ($1, $2, $3, 'enterprise', NOW()) "
         "ON CONFLICT (id) DO NOTHING",
-        tenant_id, name, f"ns_{tenant_id[:8]}",
+        tenant_id,
+        name,
+        f"ns_{tenant_id[:8]}",
     )
+
 
 async def _make_patient(conn, tenant_id: str) -> str:
     patient_id = str(uuid.uuid4())
     await conn.execute(
         "INSERT INTO patients (id, mrn, tenant_id, is_active, created_at) "
         "VALUES ($1, $2, $3, TRUE, NOW())",
-        patient_id, f"vault:v1:TEST_{patient_id[:8]}", tenant_id,
+        patient_id,
+        f"vault:v1:TEST_{patient_id[:8]}",
+        tenant_id,
     )
     return patient_id
+
 
 async def _current_user_bypasses_rls(conn) -> bool:
     """True if the connecting role bypasses RLS entirely.
@@ -93,6 +100,7 @@ async def _current_user_bypasses_rls(conn) -> bool:
         "SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user"
     )
 
+
 class TestRLSPolicyExists:
     """Sanity checks that the migration actually applied — fail fast
     with a clear message rather than a confusing zero-rows result."""
@@ -101,6 +109,7 @@ class TestRLSPolicyExists:
     @skip_integration
     async def test_rls_enabled_on_patients(self):
         import asyncpg
+
         conn = await asyncpg.connect(POSTGRES_URL)
         try:
             row = await conn.fetchrow(
@@ -122,6 +131,7 @@ class TestRLSPolicyExists:
     @skip_integration
     async def test_tenant_isolation_policy_exists(self):
         import asyncpg
+
         conn = await asyncpg.connect(POSTGRES_URL)
         try:
             row = await conn.fetchrow(
@@ -130,11 +140,11 @@ class TestRLSPolicyExists:
                 "AND polname = 'patients_tenant_isolation'"
             )
             assert row is not None, (
-                "patients_tenant_isolation policy missing — "
-                "run migration 003_enable_rls.py"
+                "patients_tenant_isolation policy missing — run migration 003_enable_rls.py"
             )
         finally:
             await conn.close()
+
 
 class TestCrossTenantIsolation:
     """The gate the risk register asked for: a cross-tenant query on a
@@ -144,6 +154,7 @@ class TestCrossTenantIsolation:
     @skip_integration
     async def test_cross_tenant_query_returns_zero_rows(self):
         import asyncpg
+
         conn = await asyncpg.connect(POSTGRES_URL)
         try:
             if await _current_user_bypasses_rls(conn):
@@ -164,20 +175,15 @@ class TestCrossTenantIsolation:
                 await _make_patient(conn, TENANT_A)  # 2 rows for tenant A
 
                 # Scope the session to tenant B and query patients.
-                await conn.execute(
-                    "SELECT set_config('app.tenant_id', $1, true)", TENANT_B
-                )
+                await conn.execute("SELECT set_config('app.tenant_id', $1, true)", TENANT_B)
                 count_as_b = await conn.fetchval("SELECT COUNT(*) FROM patients")
                 assert count_as_b == 0, (
-                    f"RLS isolation FAILED: tenant B saw {count_as_b} rows "
-                    "that belong to tenant A"
+                    f"RLS isolation FAILED: tenant B saw {count_as_b} rows that belong to tenant A"
                 )
 
                 # Sanity check the positive path — scoped to the owning
                 # tenant, the rows must be visible.
-                await conn.execute(
-                    "SELECT set_config('app.tenant_id', $1, true)", TENANT_A
-                )
+                await conn.execute("SELECT set_config('app.tenant_id', $1, true)", TENANT_A)
                 count_as_a = await conn.fetchval("SELECT COUNT(*) FROM patients")
                 assert count_as_a == 2, (
                     f"Expected 2 rows visible to owning tenant, got {count_as_a} "
@@ -194,6 +200,7 @@ class TestCrossTenantIsolation:
         """A connection that never calls SET LOCAL app.tenant_id must
         fail closed, not fail open."""
         import asyncpg
+
         conn = await asyncpg.connect(POSTGRES_URL)
         try:
             if await _current_user_bypasses_rls(conn):

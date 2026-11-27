@@ -25,6 +25,7 @@ is therefore scoped specifically to 403s -- authentication succeeded
 route. A bare 401's failed-attempt trail lives in the structured JSON
 access logs (logging_config.py) instead, which need no tenant context.
 """
+
 from alembic import op
 
 revision = "005"
@@ -33,8 +34,14 @@ branch_labels = None
 depends_on = None
 
 _OLD_ACTIONS = (
-    "document_query", "document_ingest", "phi_reveal", "api_key_create",
-    "api_key_revoke", "user_login", "settings_change", "data_export",
+    "document_query",
+    "document_ingest",
+    "phi_reveal",
+    "api_key_create",
+    "api_key_revoke",
+    "user_login",
+    "settings_change",
+    "data_export",
 )
 _NEW_ACTIONS = _OLD_ACTIONS + ("access_denied",)
 
@@ -45,9 +52,7 @@ def _in_clause(actions: tuple[str, ...]) -> str:
 
 def upgrade() -> None:
     op.drop_constraint("ck_audit_logs_action", "audit_logs", type_="check")
-    op.create_check_constraint(
-        "ck_audit_logs_action", "audit_logs", _in_clause(_NEW_ACTIONS)
-    )
+    op.create_check_constraint("ck_audit_logs_action", "audit_logs", _in_clause(_NEW_ACTIONS))
 
 
 def downgrade() -> None:
@@ -63,6 +68,4 @@ def downgrade() -> None:
         "END IF; END $$;"
     )
     op.drop_constraint("ck_audit_logs_action", "audit_logs", type_="check")
-    op.create_check_constraint(
-        "ck_audit_logs_action", "audit_logs", _in_clause(_OLD_ACTIONS)
-    )
+    op.create_check_constraint("ck_audit_logs_action", "audit_logs", _in_clause(_OLD_ACTIONS))

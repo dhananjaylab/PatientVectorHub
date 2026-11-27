@@ -30,6 +30,7 @@ AuditLogMiddleware and phi_reveal endpoint) funnels through, so the
 metric can't drift out of sync with what's actually being written by
 being incremented separately at each call site.
 """
+
 from __future__ import annotations
 
 import datetime
@@ -50,8 +51,10 @@ from .session import get_untenanted_session
 async def list_tenants() -> list[dict]:
     async with get_untenanted_session() as db:
         rows = (
-            await db.execute(text("SELECT id, name, namespace, plan, created_at FROM tenants"))
-        ).mappings().all()
+            (await db.execute(text("SELECT id, name, namespace, plan, created_at FROM tenants")))
+            .mappings()
+            .all()
+        )
         return [dict(r) for r in rows]
 
 
@@ -60,32 +63,38 @@ async def list_tenants() -> list[dict]:
 
 async def get_user_by_keycloak_sub(db: AsyncSession, keycloak_subject: str) -> dict | None:
     row = (
-        await db.execute(
-            text(
-                "SELECT id, email, role, tenant_id, is_active"
-                " FROM users WHERE keycloak_subject = :ks"
-            ),
-            {"ks": keycloak_subject},
+        (
+            await db.execute(
+                text(
+                    "SELECT id, email, role, tenant_id, is_active"
+                    " FROM users WHERE keycloak_subject = :ks"
+                ),
+                {"ks": keycloak_subject},
+            )
         )
-    ).mappings().fetchone()
+        .mappings()
+        .fetchone()
+    )
     return dict(row) if row else None
 
 
 async def touch_user_last_login(db: AsyncSession, user_id: str) -> None:
-    await db.execute(
-        text("UPDATE users SET last_login = NOW() WHERE id = :uid"), {"uid": user_id}
-    )
+    await db.execute(text("UPDATE users SET last_login = NOW() WHERE id = :uid"), {"uid": user_id})
 
 
 async def list_users(db: AsyncSession) -> list[dict]:
     rows = (
-        await db.execute(
-            text(
-                "SELECT id, email, role, is_active, last_login, created_at"
-                " FROM users ORDER BY created_at DESC"
+        (
+            await db.execute(
+                text(
+                    "SELECT id, email, role, is_active, last_login, created_at"
+                    " FROM users ORDER BY created_at DESC"
+                )
             )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     return [dict(r) for r in rows]
 
 
@@ -102,7 +111,7 @@ async def create_api_key(
     raw_key = f"pvh_{secrets.token_urlsafe(32)}"
     key_hash = _hash_key(raw_key)
     key_id = str(uuid.uuid4())
-    expires = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=expires_days)
+    expires = datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=expires_days)
     await db.execute(
         text(
             "INSERT INTO api_keys"
@@ -146,13 +155,17 @@ async def list_api_keys(db: AsyncSession) -> list[dict]:
     """Never returns key_hash or any reconstructible secret — listing
     endpoints only need metadata for the admin UI's revoke/rotate flow."""
     rows = (
-        await db.execute(
-            text(
-                "SELECT id, name, scopes, user_id, expires_at, is_revoked, last_used_at,"
-                " created_at FROM api_keys ORDER BY created_at DESC"
+        (
+            await db.execute(
+                text(
+                    "SELECT id, name, scopes, user_id, expires_at, is_revoked, last_used_at,"
+                    " created_at FROM api_keys ORDER BY created_at DESC"
+                )
             )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     return [dict(r) for r in rows]
 
 
@@ -176,13 +189,17 @@ async def resolve_api_key(raw_key: str) -> dict | None:
     key_hash = _hash_key(raw_key)
     async with get_untenanted_session() as db:
         row = (
-            await db.execute(
-                text("SELECT * FROM resolve_api_key_tenant(:hash)"), {"hash": key_hash}
+            (
+                await db.execute(
+                    text("SELECT * FROM resolve_api_key_tenant(:hash)"), {"hash": key_hash}
+                )
             )
-        ).mappings().fetchone()
+            .mappings()
+            .fetchone()
+        )
     if not row or row["is_revoked"]:
         return None
-    if row["expires_at"] and row["expires_at"] < datetime.datetime.now(datetime.timezone.utc):
+    if row["expires_at"] and row["expires_at"] < datetime.datetime.now(datetime.UTC):
         return None
     return dict(row)
 
@@ -206,7 +223,13 @@ async def create_ingestion_job(
         # SQLAlchemy's raw text() path — confirmed live, it otherwise fails
         # with "asyncpg.exceptions.DataError: invalid input for query
         # argument $N: {...} ('dict' object has no attribute 'encode')".
-        {"id": jid, "name": name, "src": source_type, "cfg": json.dumps(source_config), "uid": created_by},
+        {
+            "id": jid,
+            "name": name,
+            "src": source_type,
+            "cfg": json.dumps(source_config),
+            "uid": created_by,
+        },
     )
     return {"id": jid, "status": "queued"}
 
@@ -225,16 +248,20 @@ async def set_job_doc_count_total(db: AsyncSession, *, job_id: str, total: int) 
 
 async def get_ingestion_job(db: AsyncSession, job_id: str) -> dict | None:
     row = (
-        await db.execute(
-            text(
-                "SELECT id, name, status, source_type, doc_count_total,"
-                " doc_count_processed, doc_count_failed, error_message,"
-                " started_at, completed_at, created_at"
-                " FROM ingestion_jobs WHERE id = :jid"
-            ),
-            {"jid": job_id},
+        (
+            await db.execute(
+                text(
+                    "SELECT id, name, status, source_type, doc_count_total,"
+                    " doc_count_processed, doc_count_failed, error_message,"
+                    " started_at, completed_at, created_at"
+                    " FROM ingestion_jobs WHERE id = :jid"
+                ),
+                {"jid": job_id},
+            )
         )
-    ).mappings().fetchone()
+        .mappings()
+        .fetchone()
+    )
     if not row:
         return None
     total = max(row["doc_count_total"] or 1, 1)
@@ -267,15 +294,19 @@ async def list_ingestion_jobs(
     where = " AND ".join(conditions)
 
     rows = (
-        await db.execute(
-            text(
-                f"SELECT id, name, status, doc_count_total, doc_count_processed,"
-                f" doc_count_failed, created_at FROM ingestion_jobs WHERE {where}"
-                f" ORDER BY created_at DESC LIMIT :lim OFFSET :off"
-            ),
-            params,
+        (
+            await db.execute(
+                text(
+                    f"SELECT id, name, status, doc_count_total, doc_count_processed,"
+                    f" doc_count_failed, created_at FROM ingestion_jobs WHERE {where}"
+                    f" ORDER BY created_at DESC LIMIT :lim OFFSET :off"
+                ),
+                params,
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     total = (
         await db.execute(
             text(f"SELECT COUNT(*) FROM ingestion_jobs WHERE {where}"),
@@ -412,15 +443,19 @@ async def list_audit_logs(
     where = " AND ".join(conditions)
 
     rows = (
-        await db.execute(
-            text(
-                f"SELECT id, user_id, action, patient_id, ip_address, request_id,"
-                f" status_code, created_at FROM audit_logs WHERE {where}"
-                f" ORDER BY created_at DESC LIMIT :lim OFFSET :off"
-            ),
-            params,
+        (
+            await db.execute(
+                text(
+                    f"SELECT id, user_id, action, patient_id, ip_address, request_id,"
+                    f" status_code, created_at FROM audit_logs WHERE {where}"
+                    f" ORDER BY created_at DESC LIMIT :lim OFFSET :off"
+                ),
+                params,
+            )
         )
-    ).mappings().all()
+        .mappings()
+        .all()
+    )
     total = (
         await db.execute(
             text(f"SELECT COUNT(*) FROM audit_logs WHERE {where}"),
@@ -457,5 +492,3 @@ async def log_query(
             "mv": model_version,
         },
     )
-
-

@@ -4,8 +4,8 @@ conftest.py for embedding-server tests.
 This file allows pytest to discover tests in the embedding-server/tests directory.
 """
 
-import sys
 import os
+import sys
 
 # Add embedding-server/src to path if it exists
 src_path = os.path.join(os.path.dirname(__file__), "src")

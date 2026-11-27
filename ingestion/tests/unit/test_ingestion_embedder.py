@@ -2,10 +2,11 @@
 Unit tests for ingestion/src/embeddings/openai_embedder.py — the OpenAI
 client itself is always mocked; no real API calls or API key needed.
 """
-import sys
+
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+
 
 def _fake_response(n_vectors: int, dims: int = 1536, tokens: int = 10):
     resp = MagicMock()
@@ -13,10 +14,12 @@ def _fake_response(n_vectors: int, dims: int = 1536, tokens: int = 10):
     resp.usage.total_tokens = tokens
     return resp
 
+
 def _fake_client(create_mock):
     client = MagicMock()
     client.embeddings.create = create_mock
     return client
+
 
 class TestEmbedBatch:
     @pytest.mark.asyncio
@@ -43,8 +46,8 @@ class TestEmbedBatch:
 
     @pytest.mark.asyncio
     async def test_dimensions_param_is_passed_through(self):
-        from src.embeddings import openai_embedder
         from src.config import settings
+        from src.embeddings import openai_embedder
 
         create_mock = AsyncMock(return_value=_fake_response(1))
         with patch.object(openai_embedder, "_get_client", return_value=_fake_client(create_mock)):
@@ -55,8 +58,8 @@ class TestEmbedBatch:
 
     @pytest.mark.asyncio
     async def test_batches_respect_embedding_batch_size(self):
-        from src.embeddings import openai_embedder
         from src.config import settings
+        from src.embeddings import openai_embedder
 
         original_batch_size = settings.EMBEDDING_BATCH_SIZE
         settings.EMBEDDING_BATCH_SIZE = 2
@@ -90,9 +93,7 @@ class TestEmbedBatch:
                 raise rate_limit_error
             return _fake_response(1)
 
-        with patch.object(
-            openai_embedder, "_get_client", return_value=_fake_client(flaky_create)
-        ):
+        with patch.object(openai_embedder, "_get_client", return_value=_fake_client(flaky_create)):
             vectors = await openai_embedder.embed_batch(["one chunk"])
 
         assert call_count["n"] == 2
@@ -106,4 +107,5 @@ class TestEmbedBatch:
         reaching this line (the module already imported successfully at
         the top of this file) proves the import didn't raise."""
         from src.embeddings import openai_embedder
+
         assert hasattr(openai_embedder, "_get_client")

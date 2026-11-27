@@ -50,6 +50,7 @@ outermost of all) fixes that as a side effect of giving this middleware
 a reliable request_id to attach to every access_denied row -- see
 main.py's own reordering comment for the verification.
 """
+
 from __future__ import annotations
 
 import logging

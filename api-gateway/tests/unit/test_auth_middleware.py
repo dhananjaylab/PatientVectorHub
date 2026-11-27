@@ -1,7 +1,8 @@
 """Unit tests for api-gateway/src/middleware/auth.py."""
-import pytest
 
+import pytest
 from src.middleware.auth import KeycloakJWTMiddleware  # noqa: E402
+
 
 class TestExtractRole:
     def test_picks_highest_priority_role_when_multiple_present(self):
@@ -19,6 +20,7 @@ class TestExtractRole:
     def test_missing_realm_access_defaults_to_readonly(self):
         assert KeycloakJWTMiddleware._extract_role({}) == "readonly"
 
+
 class TestRoleFromScopes:
     def test_admin_write_maps_to_admin(self):
         assert KeycloakJWTMiddleware._role_from_scopes(["admin:write"]) == "admin"
@@ -33,15 +35,14 @@ class TestRoleFromScopes:
         assert KeycloakJWTMiddleware._role_from_scopes(["audit:read"]) == "auditor"
 
     def test_highest_privilege_scope_wins_when_multiple_present(self):
-        assert (
-            KeycloakJWTMiddleware._role_from_scopes(["query:read", "admin:write"]) == "admin"
-        )
+        assert KeycloakJWTMiddleware._role_from_scopes(["query:read", "admin:write"]) == "admin"
 
     def test_unrecognized_scopes_default_to_readonly(self):
         assert KeycloakJWTMiddleware._role_from_scopes(["something:else"]) == "readonly"
 
     def test_empty_scopes_default_to_readonly(self):
         assert KeycloakJWTMiddleware._role_from_scopes([]) == "readonly"
+
 
 class TestMiddlewareRequestHandling:
     """Request-level checks against a minimal app — verifies public paths,
@@ -78,7 +79,7 @@ class TestMiddlewareRequestHandling:
 
     @pytest.mark.asyncio
     async def test_public_path_bypasses_middleware_entirely(self, app):
-        from httpx import AsyncClient, ASGITransport
+        from httpx import ASGITransport, AsyncClient
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
             resp = await c.get("/health")
@@ -86,7 +87,7 @@ class TestMiddlewareRequestHandling:
 
     @pytest.mark.asyncio
     async def test_no_credentials_passes_through_anonymous(self, app):
-        from httpx import AsyncClient, ASGITransport
+        from httpx import ASGITransport, AsyncClient
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
             resp = await c.get("/whoami")
@@ -95,7 +96,7 @@ class TestMiddlewareRequestHandling:
 
     @pytest.mark.asyncio
     async def test_malformed_bearer_token_returns_401_not_a_crash(self, app):
-        from httpx import AsyncClient, ASGITransport
+        from httpx import ASGITransport, AsyncClient
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
             resp = await c.get("/whoami", headers={"Authorization": "Bearer not-a-real-jwt"})
@@ -104,9 +105,10 @@ class TestMiddlewareRequestHandling:
 
     @pytest.mark.asyncio
     async def test_api_key_resolution_failure_returns_503_not_a_crash(self, app, monkeypatch):
-        from httpx import AsyncClient, ASGITransport
         from unittest.mock import AsyncMock
+
         import src.db.crud as crud_module
+        from httpx import ASGITransport, AsyncClient
 
         # Deterministic regardless of whether a real Postgres happens to be
         # reachable from wherever this test runs — resolve_api_key raising
@@ -122,9 +124,10 @@ class TestMiddlewareRequestHandling:
 
     @pytest.mark.asyncio
     async def test_api_key_not_found_returns_401_not_a_crash(self, app, monkeypatch):
-        from httpx import AsyncClient, ASGITransport
         from unittest.mock import AsyncMock
+
         import src.db.crud as crud_module
+        from httpx import ASGITransport, AsyncClient
 
         # Covers: key genuinely doesn't exist, revoked, expired, AND the
         # ADR-010 "BYPASSRLS not yet granted in this environment" case —
@@ -138,9 +141,10 @@ class TestMiddlewareRequestHandling:
 
     @pytest.mark.asyncio
     async def test_api_key_resolved_populates_request_state(self, app, monkeypatch):
-        from httpx import AsyncClient, ASGITransport
         from unittest.mock import AsyncMock
+
         import src.db.crud as crud_module
+        from httpx import ASGITransport, AsyncClient
 
         monkeypatch.setattr(
             crud_module,
@@ -185,7 +189,7 @@ class TestMiddlewareRequestHandling:
     async def test_jwt_tenant_claim_normalizes_valid_string_shapes(
         self, app, valid_jwt_mocks, monkeypatch, tenant_claim, expected
     ):
-        from httpx import AsyncClient, ASGITransport
+        from httpx import ASGITransport, AsyncClient
 
         monkeypatch.setattr(
             valid_jwt_mocks.jwt,
@@ -215,7 +219,7 @@ class TestMiddlewareRequestHandling:
     async def test_jwt_tenant_claim_rejects_missing_or_malformed_values(
         self, app, valid_jwt_mocks, monkeypatch, tenant_claim
     ):
-        from httpx import AsyncClient, ASGITransport
+        from httpx import ASGITransport, AsyncClient
 
         payload = {
             "sub": "user-1",

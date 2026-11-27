@@ -4,14 +4,22 @@
 class TestModelsImport:
     def test_models_module_imports(self):
         from src.db import models
+
         assert models.Base is not None
 
     def test_all_eight_tables_present(self):
         from src.db.models import Base
+
         table_names = set(Base.metadata.tables.keys())
         assert table_names == {
-            "tenants", "users", "patients", "ingestion_jobs",
-            "documents", "api_keys", "audit_logs", "query_logs",
+            "tenants",
+            "users",
+            "patients",
+            "ingestion_jobs",
+            "documents",
+            "api_keys",
+            "audit_logs",
+            "query_logs",
         }
 
 
@@ -24,6 +32,7 @@ class TestTenantScopedTables:
 
     def test_non_root_tables_have_tenant_id(self):
         from src.db.models import Base
+
         for name, table in Base.metadata.tables.items():
             if name == "tenants":
                 continue
@@ -31,24 +40,23 @@ class TestTenantScopedTables:
 
     def test_tenants_table_has_no_tenant_id(self):
         from src.db.models import Base
+
         assert "tenant_id" not in Base.metadata.tables["tenants"].columns
 
 
 class TestForeignKeys:
     def test_documents_references_patients_and_ingestion_jobs(self):
         from src.db.models import Base
-        fk_targets = {
-            fk.target_fullname for fk in Base.metadata.tables["documents"].foreign_keys
-        }
+
+        fk_targets = {fk.target_fullname for fk in Base.metadata.tables["documents"].foreign_keys}
         assert "patients.id" in fk_targets
         assert "ingestion_jobs.id" in fk_targets
         assert "tenants.id" in fk_targets
 
     def test_api_keys_references_users_and_tenants(self):
         from src.db.models import Base
-        fk_targets = {
-            fk.target_fullname for fk in Base.metadata.tables["api_keys"].foreign_keys
-        }
+
+        fk_targets = {fk.target_fullname for fk in Base.metadata.tables["api_keys"].foreign_keys}
         assert "users.id" in fk_targets
         assert "tenants.id" in fk_targets
 
@@ -56,6 +64,7 @@ class TestForeignKeys:
         # Deliberate: patient_id on audit_logs is a plain uuid, not an FK,
         # so audit rows can outlive a deleted/anonymized patient record.
         from src.db.models import Base
+
         columns_with_fks = {
             col.name for col in Base.metadata.tables["audit_logs"].columns if col.foreign_keys
         }
@@ -70,5 +79,6 @@ class TestAuditLogMetadataColumnMapping:
         # 05's schema specifies. Checked at the Table level (unambiguous)
         # rather than via attribute-proxy behavior on the class.
         from src.db.models import AuditLog
+
         assert "metadata" in AuditLog.__table__.columns
         assert hasattr(AuditLog, "audit_metadata")

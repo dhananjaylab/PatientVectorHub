@@ -24,7 +24,7 @@ class TestProviderDispatch:
         router = LLMRouter()
         provider = settings.LLM_DEFAULT_PROVIDER
         mock_path = f"src.llm_router._complete_{provider}"
-        
+
         with patch(mock_path, new=AsyncMock(return_value="answer")) as mocked:
             result = await router.complete("prompt text")
         mocked.assert_called_once()
@@ -59,7 +59,7 @@ class TestProviderDispatch:
         router = LLMRouter()
         provider = settings.LLM_DEFAULT_PROVIDER
         mock_path = f"src.llm_router._complete_{provider}"
-        
+
         with patch(mock_path, new=AsyncMock(return_value="x")) as mocked:
             await router.complete("prompt")
         mocked.assert_called_once_with("prompt", settings.LLM_MAX_TOKENS)

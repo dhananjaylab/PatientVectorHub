@@ -20,6 +20,7 @@ Then poll completion with:
   SELECT status, doc_count_processed, doc_count_failed, doc_count_total
   FROM ingestion_jobs WHERE id = '<job_id printed below>';
 """
+
 import argparse
 import sys
 import time
@@ -30,7 +31,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "ingestion"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "vector-store"))
 
 from sqlalchemy import text  # noqa: E402
-
 from src.db.session import get_tenant_sync_session  # noqa: E402
 from src.workers.batch_worker import process_document  # noqa: E402
 
@@ -38,13 +38,17 @@ from src.workers.batch_worker import process_document  # noqa: E402
 def main(tenant_id: str, count: int, r2_uri: str) -> None:
     job_id = str(uuid.uuid4())
     with get_tenant_sync_session(tenant_id) as db:
-        db.execute(text(
-            "INSERT INTO ingestion_jobs (id, name, status, source_type, doc_count_total, tenant_id)"
-            " VALUES (:id, 'load-test', 'queued', 's3_batch', :n, :tid)"
-        ), {"id": job_id, "n": count, "tid": tenant_id})
+        db.execute(
+            text(
+                "INSERT INTO ingestion_jobs (id, name, status, source_type, doc_count_total, tenant_id)"
+                " VALUES (:id, 'load-test', 'queued', 's3_batch', :n, :tid)"
+            ),
+            {"id": job_id, "n": count, "tid": tenant_id},
+        )
 
         patient_ids = [
-            r[0] for r in db.execute(
+            r[0]
+            for r in db.execute(
                 text("SELECT id FROM patients WHERE tenant_id = :tid LIMIT 1000"),
                 {"tid": tenant_id},
             )
@@ -59,22 +63,30 @@ def main(tenant_id: str, count: int, r2_uri: str) -> None:
         doc_id = str(uuid.uuid4())
         patient_id = str(patient_ids[i % len(patient_ids)])
         with get_tenant_sync_session(tenant_id) as db:
-            db.execute(text(
-                "INSERT INTO documents (id, patient_id, document_type, source_path,"
-                " ingestion_job_id, embedding_status, tenant_id)"
-                " VALUES (:id, :pid, 'clinical_note', :src, :jid, 'pending', :tid)"
-            ), {"id": doc_id, "pid": patient_id, "src": r2_uri, "jid": job_id, "tid": tenant_id})
+            db.execute(
+                text(
+                    "INSERT INTO documents (id, patient_id, document_type, source_path,"
+                    " ingestion_job_id, embedding_status, tenant_id)"
+                    " VALUES (:id, :pid, 'clinical_note', :src, :jid, 'pending', :tid)"
+                ),
+                {"id": doc_id, "pid": patient_id, "src": r2_uri, "jid": job_id, "tid": tenant_id},
+            )
         process_document.delay(
-            doc_id=doc_id, tenant_id=tenant_id, job_id=job_id,
-            r2_uri=r2_uri, document_type="clinical_note",
+            doc_id=doc_id,
+            tenant_id=tenant_id,
+            job_id=job_id,
+            r2_uri=r2_uri,
+            document_type="clinical_note",
         )
         if (i + 1) % 500 == 0:
             elapsed = time.time() - start
             print(f"  dispatched {i + 1}/{count}  ({(i + 1) / elapsed:.1f} docs/sec so far)")
 
     total_elapsed = time.time() - start
-    print(f"\nDispatch complete: {count} documents in {total_elapsed:.1f}s "
-          f"({count / total_elapsed:.1f} docs/sec dispatch rate).")
+    print(
+        f"\nDispatch complete: {count} documents in {total_elapsed:.1f}s "
+        f"({count / total_elapsed:.1f} docs/sec dispatch rate)."
+    )
     print(f"Job ID: {job_id}")
     print(
         "Poll processing completion with:\n"
@@ -88,7 +100,8 @@ if __name__ == "__main__":
     parser.add_argument("--count", type=int, default=10_000)
     parser.add_argument("--tenant", default="00000000-0000-0000-0000-000000000001")
     parser.add_argument(
-        "--r2-uri", default="r2://pvh-documents-dev/seed/load-test/synthetic.txt",
+        "--r2-uri",
+        default="r2://pvh-documents-dev/seed/load-test/synthetic.txt",
         help="A single small text file already uploaded to R2; reused for every document.",
     )
     args = parser.parse_args()

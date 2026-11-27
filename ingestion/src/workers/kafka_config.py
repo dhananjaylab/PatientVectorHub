@@ -12,6 +12,7 @@ is the documented way to build the context from cafile/certfile/keyfile
 paths. Centralized here so dlq_producer.py and stream_consumer.py share
 one correct implementation instead of two independently-maintained ones.
 """
+
 import os
 from pathlib import Path
 

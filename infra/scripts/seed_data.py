@@ -27,15 +27,16 @@ is not a superuser) with:
     psycopg2.errors.InsufficientPrivilege: new row violates row-level
     security policy for table "users" / "patients"
 """
+
+import base64
+import hashlib
 import os
+import secrets
 import sys
+import uuid
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
-import base64
-import uuid
-import hashlib
-import secrets
-from datetime import datetime, timedelta, timezone
 
 from dotenv import load_dotenv
 
@@ -121,9 +122,7 @@ def real_mrn(seed: str) -> str:
     client = _get_vault_client()
     plaintext = _mrn_plaintext_for_seed(seed)
     b64_plaintext = base64.b64encode(plaintext.encode("utf-8")).decode("ascii")
-    response = client.secrets.transit.encrypt_data(
-        name=VAULT_TRANSIT_KEY, plaintext=b64_plaintext
-    )
+    response = client.secrets.transit.encrypt_data(name=VAULT_TRANSIT_KEY, plaintext=b64_plaintext)
     return response["data"]["ciphertext"]
 
 
@@ -171,6 +170,11 @@ def get_database_url() -> str:
     parts = urlsplit(url)
     query = dict(parse_qsl(parts.query, keep_blank_values=True))
 
+    # Provider DSNs commonly use `ssl`, but psycopg2 only accepts `sslmode`.
+    ssl = query.pop("ssl", None)
+    if ssl is not None:
+        query.setdefault("sslmode", ssl)
+
     # Aiven requires SSL; psycopg2 expects sslmode in the URL query string.
     if "aivencloud.com" in (parts.hostname or ""):
         query.setdefault("sslmode", "require")
@@ -179,6 +183,7 @@ def get_database_url() -> str:
     query.setdefault("options", "-c statement_timeout=30000")
 
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+
 
 TENANT_A = "00000000-0000-0000-0000-000000000001"
 TENANT_B = "00000000-0000-0000-0000-000000000002"
@@ -257,20 +262,26 @@ def seed() -> None:
     # wasteful) -- threaded through to resolve_mrn() below.
     vault_ready = _vault_ready()
     if vault_ready:
-        print(f"  OK Vault reachable at {VAULT_ADDR}, transit key '{VAULT_TRANSIT_KEY}' "
-              "exists -- patient MRNs will be REAL Vault Transit ciphertext "
-              "(encrypting synthetic plaintext, per this script's own "
-              "'NO real PHI' data)")
+        print(
+            f"  OK Vault reachable at {VAULT_ADDR}, transit key '{VAULT_TRANSIT_KEY}' "
+            "exists -- patient MRNs will be REAL Vault Transit ciphertext "
+            "(encrypting synthetic plaintext, per this script's own "
+            "'NO real PHI' data)"
+        )
     elif ALLOW_REAL_PHI:
-        print(f"  FAIL ALLOW_REAL_PHI=true but Vault is unreachable at {VAULT_ADDR} "
-              f"or transit key '{VAULT_TRANSIT_KEY}' is missing.")
+        print(
+            f"  FAIL ALLOW_REAL_PHI=true but Vault is unreachable at {VAULT_ADDR} "
+            f"or transit key '{VAULT_TRANSIT_KEY}' is missing."
+        )
         print("  Run infra/scripts/vault_init.sh first, or `docker-compose up vault`.")
         sys.exit(1)
     else:
-        print(f"  WARN Vault unreachable at {VAULT_ADDR} -- falling back to fake_mrn() "
-              "placeholder ciphertext-shaped strings (fine for casual local dev "
-              "without `docker-compose up vault`; will refuse to run this way "
-              "once ALLOW_REAL_PHI=true)")
+        print(
+            f"  WARN Vault unreachable at {VAULT_ADDR} -- falling back to fake_mrn() "
+            "placeholder ciphertext-shaped strings (fine for casual local dev "
+            "without `docker-compose up vault`; will refuse to run this way "
+            "once ALLOW_REAL_PHI=true)"
+        )
 
     print("Connecting to configured PostgreSQL database...")
     with engine.connect() as conn:
@@ -279,11 +290,14 @@ def seed() -> None:
 
         # Tenants -- not RLS-scoped (root table, no tenant_id column).
         for t in TENANTS:
-            conn.execute(text(
-                "INSERT INTO tenants (id, name, namespace, plan, created_at)"
-                " VALUES (:id, :name, :ns, 'enterprise', NOW())"
-                " ON CONFLICT (id) DO NOTHING"
-            ), {"id": t["id"], "name": t["name"], "ns": t["namespace"]})
+            conn.execute(
+                text(
+                    "INSERT INTO tenants (id, name, namespace, plan, created_at)"
+                    " VALUES (:id, :name, :ns, 'enterprise', NOW())"
+                    " ON CONFLICT (id) DO NOTHING"
+                ),
+                {"id": t["id"], "name": t["name"], "ns": t["namespace"]},
+            )
         print(f"  OK {len(TENANTS)} tenants seeded")
 
         # Users (one per role per tenant) -- RLS-scoped, set context per tenant.
@@ -294,22 +308,23 @@ def seed() -> None:
             user_ids[tid] = {}
             _set_tenant_context(conn, tid)
             for role in ROLES:
-                uid = str(uuid.uuid5(
-                    uuid.NAMESPACE_DNS, f"{role}@{tenant_label}.test"
-                ))
+                uid = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{role}@{tenant_label}.test"))
                 user_ids[tid][role] = uid
-                conn.execute(text(
-                    "INSERT INTO users"
-                    " (id, email, keycloak_subject, role, tenant_id, is_active, created_at)"
-                    " VALUES (:id, :email, :ks, :role, :tid, TRUE, NOW())"
-                    " ON CONFLICT (keycloak_subject) DO NOTHING"
-                ), {
-                    "id": uid,
-                    "email": f"{role}@{tenant_label}.test",
-                    "ks": f"kc-{role}-{tenant_label}",
-                    "role": role,
-                    "tid": tid,
-                })
+                conn.execute(
+                    text(
+                        "INSERT INTO users"
+                        " (id, email, keycloak_subject, role, tenant_id, is_active, created_at)"
+                        " VALUES (:id, :email, :ks, :role, :tid, TRUE, NOW())"
+                        " ON CONFLICT (keycloak_subject) DO NOTHING"
+                    ),
+                    {
+                        "id": uid,
+                        "email": f"{role}@{tenant_label}.test",
+                        "ks": f"kc-{role}-{tenant_label}",
+                        "role": role,
+                        "tid": tid,
+                    },
+                )
                 user_count += 1
         print(f"  OK {user_count} users seeded ({len(ROLES)} roles x {len(TENANTS)} tenants)")
 
@@ -327,11 +342,14 @@ def seed() -> None:
                 if j < 3:
                     sample_ids.append(pid)
 
-            conn.execute(text(
-                "INSERT INTO patients (id, mrn, tenant_id, is_active, created_at)"
-                " VALUES (:id, :mrn, :tid, TRUE, NOW())"
-                " ON CONFLICT (id) DO NOTHING"
-            ), batch)
+            conn.execute(
+                text(
+                    "INSERT INTO patients (id, mrn, tenant_id, is_active, created_at)"
+                    " VALUES (:id, :mrn, :tid, TRUE, NOW())"
+                    " ON CONFLICT (id) DO NOTHING"
+                ),
+                batch,
+            )
             patient_count += 1000
             patient_sample_ids[tid] = sample_ids
 
@@ -348,56 +366,65 @@ def seed() -> None:
             engineer_id = user_ids[tid]["engineer"]
 
             job_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"seed-job-{tid}"))
-            conn.execute(text(
-                "INSERT INTO ingestion_jobs"
-                " (id, name, status, source_type, source_config, doc_count_total,"
-                "  doc_count_processed, created_by, tenant_id, started_at, completed_at)"
-                " VALUES (:id, 'seed-batch-001', 'completed', 's3_batch', :cfg, 3, 3,"
-                "  :uid, :tid, NOW() - INTERVAL '1 hour', NOW())"
-                " ON CONFLICT (id) DO NOTHING"
-            ), {
-                "id": job_id,
-                "cfg": '{"s3_uri": "r2://pvh-documents-dev/seed/", "document_types": ["clinical_note"]}',
-                "uid": engineer_id,
-                "tid": tid,
-            })
+            conn.execute(
+                text(
+                    "INSERT INTO ingestion_jobs"
+                    " (id, name, status, source_type, source_config, doc_count_total,"
+                    "  doc_count_processed, created_by, tenant_id, started_at, completed_at)"
+                    " VALUES (:id, 'seed-batch-001', 'completed', 's3_batch', :cfg, 3, 3,"
+                    "  :uid, :tid, NOW() - INTERVAL '1 hour', NOW())"
+                    " ON CONFLICT (id) DO NOTHING"
+                ),
+                {
+                    "id": job_id,
+                    "cfg": '{"s3_uri": "r2://pvh-documents-dev/seed/", "document_types": ["clinical_note"]}',
+                    "uid": engineer_id,
+                    "tid": tid,
+                },
+            )
             job_count += 1
 
             for k, patient_id in enumerate(patient_sample_ids[tid]):
                 doc_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"seed-doc-{tid}-{k}"))
-                conn.execute(text(
-                    "INSERT INTO documents"
-                    " (id, patient_id, document_type, source_path, ingestion_job_id,"
-                    "  embedding_status, chunk_count, model_version, tenant_id)"
-                    " VALUES (:id, :pid, :dtype, :src, :job, 'completed', 4,"
-                    "  'text-embedding-3-large', :tid)"
-                    " ON CONFLICT (id) DO NOTHING"
-                ), {
-                    "id": doc_id,
-                    "pid": patient_id,
-                    "dtype": DOCUMENT_TYPES[k % len(DOCUMENT_TYPES)],
-                    "src": f"r2://pvh-documents-dev/seed/{tid}/{doc_id}/original.txt",
-                    "job": job_id,
-                    "tid": tid,
-                })
+                conn.execute(
+                    text(
+                        "INSERT INTO documents"
+                        " (id, patient_id, document_type, source_path, ingestion_job_id,"
+                        "  embedding_status, chunk_count, model_version, tenant_id)"
+                        " VALUES (:id, :pid, :dtype, :src, :job, 'completed', 4,"
+                        "  'text-embedding-3-large', :tid)"
+                        " ON CONFLICT (id) DO NOTHING"
+                    ),
+                    {
+                        "id": doc_id,
+                        "pid": patient_id,
+                        "dtype": DOCUMENT_TYPES[k % len(DOCUMENT_TYPES)],
+                        "src": f"r2://pvh-documents-dev/seed/{tid}/{doc_id}/original.txt",
+                        "job": job_id,
+                        "tid": tid,
+                    },
+                )
                 doc_count += 1
 
             admin_id = user_ids[tid]["admin"]
             raw_key, key_hash = fake_api_key_hash(tid[-4:])
             key_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"seed-key-{tid}"))
-            conn.execute(text(
-                "INSERT INTO api_keys"
-                " (id, key_hash, name, scopes, user_id, tenant_id, expires_at, is_revoked)"
-                " VALUES (:id, :hash, 'seed-service-key', :scopes, :uid, :tid, :exp, FALSE)"
-                " ON CONFLICT (id) DO NOTHING"
-            ), {
-                "id": key_id,
-                "hash": key_hash,
-                "scopes": ["ingest:write", "query:read"],
-                "uid": admin_id,
-                "tid": tid,
-                "exp": datetime.now(timezone.utc) + timedelta(days=90),
-            })
+            conn.execute(
+                text(
+                    "INSERT INTO api_keys"
+                    " (id, key_hash, name, scopes, user_id, tenant_id, expires_at, is_revoked)"
+                    " VALUES (:id, :hash, 'seed-service-key', :scopes, :uid, :tid, :exp, FALSE)"
+                    " ON CONFLICT (id) DO NOTHING"
+                ),
+                {
+                    "id": key_id,
+                    "hash": key_hash,
+                    "scopes": ["ingest:write", "query:read"],
+                    "uid": admin_id,
+                    "tid": tid,
+                    "exp": datetime.now(UTC) + timedelta(days=90),
+                },
+            )
             seed_api_keys.append((tid, raw_key))
 
         print(f"  OK {job_count} ingestion_jobs seeded, {doc_count} documents seeded")

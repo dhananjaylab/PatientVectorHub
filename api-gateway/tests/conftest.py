@@ -23,6 +23,7 @@ this codebase's own code already assumes a unit-test context looks
 like. Please diff this against your real tests/conftest.py and
 reconcile before relying on it beyond Phase 10's own new tests.
 """
+
 from __future__ import annotations
 
 import os
@@ -39,9 +40,7 @@ load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
 os.environ.setdefault("ENVIRONMENT", "test")
 os.environ.setdefault("AUTH_ENABLED", "false")
-os.environ.setdefault(
-    "DATABASE_URL", "postgresql+asyncpg://pvh:pvh_local@localhost:5432/pvh_test"
-)
+os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://pvh:pvh_local@localhost:5432/pvh_test")
 os.environ.setdefault(
     "DATABASE_URL_SYNC", "postgresql+psycopg2://pvh:pvh_local@localhost:5432/pvh_test"
 )

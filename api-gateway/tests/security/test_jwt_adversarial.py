@@ -18,6 +18,7 @@ make the attack impossible to even construct if built that way. A real
 attacker isn't using PyJWT's convenience wrapper to forge a token, so
 neither does this test.
 """
+
 from __future__ import annotations
 
 import base64
@@ -28,9 +29,8 @@ import json
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from starlette.requests import Request
-
 from src.middleware.auth import KeycloakJWTMiddleware
+from starlette.requests import Request
 
 
 def _b64url(data: bytes) -> bytes:
@@ -45,7 +45,6 @@ def _raw_forge(header: dict, payload: dict, signature: bytes = b"") -> str:
         _b64url(json.dumps(header, separators=(",", ":")).encode()),
         _b64url(json.dumps(payload, separators=(",", ":")).encode()),
     ]
-    signing_input = b".".join(segments)
     segments.append(_b64url(signature) if signature else b"")
     return b".".join(segments).decode()
 
@@ -126,9 +125,7 @@ class TestAlgorithmConfusion:
         assert resp.json()["role"] == "admin"
 
     @pytest.mark.asyncio
-    async def test_hs256_signed_with_public_key_is_rejected(
-        self, app_with_mocked_jwks, keypair
-    ):
+    async def test_hs256_signed_with_public_key_is_rejected(self, app_with_mocked_jwks, keypair):
         """The attack: PyJWKClient's cache is realm-scoped, so an
         attacker who has ever seen this realm's public signing key
         (served openly at /protocol/openid-connect/certs -- that's the
@@ -145,7 +142,9 @@ class TestAlgorithmConfusion:
             _ADMIN_PAYLOAD,
             signature=hmac.new(
                 public_pem,
-                _raw_forge({"alg": "HS256", "typ": "JWT"}, _ADMIN_PAYLOAD).rsplit(".", 1)[0].encode(),
+                _raw_forge({"alg": "HS256", "typ": "JWT"}, _ADMIN_PAYLOAD)
+                .rsplit(".", 1)[0]
+                .encode(),
                 hashlib.sha256,
             ).digest(),
         )
@@ -209,8 +208,6 @@ class TestAlgorithmConfusion:
         async with AsyncClient(
             transport=ASGITransport(app=app_with_mocked_jwks), base_url="http://t"
         ) as c:
-            resp = await c.get(
-                "/whoami", headers={"Authorization": f"Bearer {tampered_token}"}
-            )
+            resp = await c.get("/whoami", headers={"Authorization": f"Bearer {tampered_token}"})
         assert resp.status_code == 401
         assert resp.json()["error"]["code"] == "AUTHENTICATION_FAILED"

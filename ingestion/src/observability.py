@@ -39,6 +39,7 @@ never forks; stream_consumer.py is one asyncio event loop) -- multiprocess
 mode would be harmless but pointless machinery for either, so both use
 the plain default registry via start_worker_metrics_server() below.
 """
+
 from __future__ import annotations
 
 import logging
@@ -119,9 +120,7 @@ def celery_worker_init(**_kwargs) -> None:
     """
     if not settings.METRICS_ENABLED:
         return
-    multiproc_dir = settings.PROMETHEUS_MULTIPROC_DIR or os.environ.get(
-        "PROMETHEUS_MULTIPROC_DIR"
-    )
+    multiproc_dir = settings.PROMETHEUS_MULTIPROC_DIR or os.environ.get("PROMETHEUS_MULTIPROC_DIR")
     if not multiproc_dir:
         log.warning(
             "celery-worker started with no PROMETHEUS_MULTIPROC_DIR set -- "
@@ -157,9 +156,7 @@ def celery_worker_process_shutdown(**_kwargs) -> None:
     long-running worker's normal child recycling (Celery periodically
     restarts child processes even in steady state, per
     worker_max_tasks_per_child-style rotation)."""
-    multiproc_dir = settings.PROMETHEUS_MULTIPROC_DIR or os.environ.get(
-        "PROMETHEUS_MULTIPROC_DIR"
-    )
+    multiproc_dir = settings.PROMETHEUS_MULTIPROC_DIR or os.environ.get("PROMETHEUS_MULTIPROC_DIR")
     if not multiproc_dir:
         return
     from prometheus_client import multiprocess

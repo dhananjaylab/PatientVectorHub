@@ -14,6 +14,7 @@ consistency. Please diff against your real errors.py and reconcile --
 flagging this the same way doc 4's ingestion/requirements.txt precedent
 did, rather than silently presenting a guess as ground truth.
 """
+
 from __future__ import annotations
 
 import logging

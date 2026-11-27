@@ -5,14 +5,16 @@ Create the shared Weaviate PatientDocument collection with native multi-tenancy.
 Multi-tenancy strategy
 ----------------------
 One collection, shard-level tenant isolation enforced by Weaviate.
-Tenants self-register on first ``collection.with_tenant(tenant_id)`` call
-(auto_tenant_creation=True), so no TENANT_IDS seed loop is needed here.
+The seed tenants are explicitly registered below, including when the
+collection already exists. ``with_tenant()`` only scopes client requests;
+it does not create a tenant for an initial read.
 
 Safe to run multiple times — skips creation if the collection already exists.
 """
+
 import os
-from pathlib import Path
 import time
+from pathlib import Path
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
@@ -33,6 +35,10 @@ WEAVIATE_PORT = int(os.getenv("WEAVIATE_PORT", "8080"))
 
 # Single shared collection — tenant isolation is handled by Weaviate natively.
 COLLECTION_NAME = "PatientDocument"
+TENANT_IDS = [
+    "00000000-0000-0000-0000-000000000001",
+    "00000000-0000-0000-0000-000000000002",
+]
 
 
 def resolve_weaviate_target() -> tuple[dict[str, str | int], str, bool]:
@@ -78,6 +84,13 @@ def build_vector_index_config(use_cloud: bool, configure_module=None, vector_dis
     )
 
 
+def ensure_tenants(collection) -> None:
+    existing_tenants = collection.tenants.get()
+    missing_tenants = [tenant_id for tenant_id in TENANT_IDS if tenant_id not in existing_tenants]
+    if missing_tenants:
+        collection.tenants.create(missing_tenants)
+
+
 def create_schema() -> None:
     try:
         import weaviate
@@ -98,13 +111,17 @@ def create_schema() -> None:
             try:
                 if use_cloud:
                     from weaviate.classes.init import Auth
+
                     client = weaviate.connect_to_weaviate_cloud(
                         cluster_url=client_kwargs["cluster_url"],
-                        auth_credentials=Auth.api_key(client_kwargs["api_key"]) if client_kwargs.get("api_key") else None,
+                        auth_credentials=Auth.api_key(client_kwargs["api_key"])
+                        if client_kwargs.get("api_key")
+                        else None,
                     )
                 else:
                     client = weaviate.connect_to_local(
-                        host=client_kwargs["host"], port=client_kwargs["port"],
+                        host=client_kwargs["host"],
+                        port=client_kwargs["port"],
                     )
                 if client.is_ready():
                     break
@@ -125,40 +142,54 @@ def create_schema() -> None:
 
         if COLLECTION_NAME in existing:
             print(f"  OK Exists  : {COLLECTION_NAME}")
-            return
+        else:
+            index_config = build_vector_index_config(
+                use_cloud=use_cloud,
+                configure_module=Configure,
+                vector_distances=VectorDistances,
+            )
 
-        index_config = build_vector_index_config(
-            use_cloud=use_cloud,
-            configure_module=Configure,
-            vector_distances=VectorDistances,
-        )
+            client.collections.create(
+                name=COLLECTION_NAME,
+                multi_tenancy_config=Configure.multi_tenancy(
+                    enabled=True,
+                    auto_tenant_creation=True,
+                ),
+                vector_config=Configure.Vectors.self_provided(
+                    vector_index_config=index_config,
+                ),
+                properties=[
+                    Property(name="chunk_text", data_type=DataType.TEXT),
+                    Property(
+                        name="document_id",
+                        data_type=DataType.TEXT,
+                        index_filterable=True,
+                        index_searchable=False,
+                    ),
+                    Property(
+                        name="patient_id_hash",
+                        data_type=DataType.TEXT,
+                        index_filterable=True,
+                        index_searchable=False,
+                    ),
+                    Property(
+                        name="document_type",
+                        data_type=DataType.TEXT,
+                        index_filterable=True,
+                        index_searchable=False,
+                    ),
+                    Property(
+                        name="model_version",
+                        data_type=DataType.TEXT,
+                        index_filterable=True,
+                        index_searchable=False,
+                    ),
+                    Property(name="chunk_index", data_type=DataType.INT),
+                ],
+            )
+            print(f"  OK Created : {COLLECTION_NAME}")
 
-        client.collections.create(
-            name=COLLECTION_NAME,
-            # Native multi-tenancy: one collection, one shard per tenant.
-            # auto_tenant_creation=True means callers do not need to pre-register
-            # tenants — they are created on first collection.with_tenant(id) use.
-            multi_tenancy_config=Configure.multi_tenancy(
-                enabled=True,
-                auto_tenant_creation=True,
-            ),
-            vector_config=Configure.Vectors.self_provided(
-                vector_index_config=index_config,
-            ),
-            properties=[
-                Property(name="chunk_text",      data_type=DataType.TEXT),
-                Property(name="document_id",     data_type=DataType.TEXT,
-                         index_filterable=True,  index_searchable=False),
-                Property(name="patient_id_hash", data_type=DataType.TEXT,
-                         index_filterable=True,  index_searchable=False),
-                Property(name="document_type",   data_type=DataType.TEXT,
-                         index_filterable=True,  index_searchable=False),
-                Property(name="model_version",   data_type=DataType.TEXT,
-                         index_filterable=True,  index_searchable=False),
-                Property(name="chunk_index",     data_type=DataType.INT),
-            ],
-        )
-        print(f"  OK Created : {COLLECTION_NAME}")
+        ensure_tenants(client.collections.get(COLLECTION_NAME))
     finally:
         if client is not None:
             client.close()

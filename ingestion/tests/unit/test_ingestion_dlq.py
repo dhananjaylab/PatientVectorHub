@@ -9,11 +9,12 @@ through real retry mechanics (which behaves inconsistently under
 task_always_eager across Celery versions) — much more reliable for a
 unit test whose only job is to prove the DLQ-routing branch fires.
 """
-import sys
 
 import json
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
+
 
 class TestDLQProducer:
     @pytest.mark.asyncio
@@ -21,16 +22,17 @@ class TestDLQProducer:
         from src.workers.dlq_producer import publish_to_dlq
 
         # Mock kafka_client_kwargs to avoid SSL certificate loading during tests
-        with patch("src.workers.dlq_producer.kafka_client_kwargs") as mock_kafka_kwargs, \
-             patch("src.workers.dlq_producer.AIOKafkaProducer") as MockProducer:
-            
+        with (
+            patch("src.workers.dlq_producer.kafka_client_kwargs") as mock_kafka_kwargs,
+            patch("src.workers.dlq_producer.AIOKafkaProducer") as mock_producer,
+        ):
             # Return minimal config without SSL
             mock_kafka_kwargs.return_value = {
                 "bootstrap_servers": "localhost:9092",
-                "security_protocol": "PLAINTEXT"
+                "security_protocol": "PLAINTEXT",
             }
-            
-            instance = MockProducer.return_value
+
+            instance = mock_producer.return_value
             instance.start = AsyncMock()
             instance.stop = AsyncMock()
             instance.send_and_wait = AsyncMock()
@@ -49,9 +51,11 @@ class TestDLQProducer:
 
     def test_publish_to_dlq_sync_wraps_the_async_version(self):
         from src.workers import dlq_producer
+
         with patch.object(dlq_producer, "publish_to_dlq", new=AsyncMock()) as mock_async:
             dlq_producer.publish_to_dlq_sync({"doc_id": "d-1"}, "boom")
         mock_async.assert_called_once()
+
 
 class TestProcessDocumentRetryExhaustion:
     """Exercises process_document()'s terminal-failure branch directly —
@@ -64,22 +68,23 @@ class TestProcessDocumentRetryExhaustion:
         celery_app.conf.task_always_eager = True
         celery_app.conf.task_eager_propagates = False
 
-        with patch(
-            "src.workers.batch_worker.get_parser_for_uri",
-            side_effect=RuntimeError("corrupt document"),
-        ), patch(
-            "src.workers.batch_worker.publish_to_dlq_sync"
-        ) as mock_dlq, patch(
-            "src.workers.batch_worker.mark_document_failed"
-        ) as mock_mark_failed, patch(
-            "src.workers.batch_worker.update_document_embedding_status"
+        with (
+            patch(
+                "src.workers.batch_worker.get_parser_for_uri",
+                side_effect=RuntimeError("corrupt document"),
+            ),
+            patch("src.workers.batch_worker.publish_to_dlq_sync") as mock_dlq,
+            patch("src.workers.batch_worker.mark_document_failed") as mock_mark_failed,
+            patch("src.workers.batch_worker.update_document_embedding_status"),
         ):
             # retries=3 == max_retries=3 -> self.request.retries >=
             # self.max_retries is True on entry, so the task must take the
             # terminal-failure branch on THIS call, not retry again.
             process_document.apply(
                 kwargs={
-                    "doc_id": "d-1", "tenant_id": "t-1", "job_id": "j-1",
+                    "doc_id": "d-1",
+                    "tenant_id": "t-1",
+                    "job_id": "j-1",
                     "r2_uri": "r2://bucket/corrupt.pdf",
                 },
                 retries=3,
@@ -92,25 +97,30 @@ class TestProcessDocumentRetryExhaustion:
         mock_mark_failed.assert_called_once()
 
     def test_non_terminal_failure_retries_instead_of_publishing_to_dlq(self):
-        from src.workers.batch_worker import celery_app, process_document
         from celery.exceptions import Retry
+        from src.workers.batch_worker import celery_app, process_document
 
         celery_app.conf.task_always_eager = True
         celery_app.conf.task_eager_propagates = True
 
-        with patch(
-            "src.workers.batch_worker.get_parser_for_uri",
-            side_effect=RuntimeError("transient network blip"),
-        ), patch("src.workers.batch_worker.publish_to_dlq_sync") as mock_dlq:
+        with (
+            patch(
+                "src.workers.batch_worker.get_parser_for_uri",
+                side_effect=RuntimeError("transient network blip"),
+            ),
+            patch("src.workers.batch_worker.publish_to_dlq_sync") as mock_dlq,
+            pytest.raises(Retry),
+        ):
             # retries=0 -> 0 >= 3 is False -> must retry, not DLQ
-            with pytest.raises(Retry):
-                process_document.apply(
-                    kwargs={
-                        "doc_id": "d-1", "tenant_id": "t-1", "job_id": "j-1",
-                        "r2_uri": "r2://bucket/flaky.pdf",
-                    },
-                    retries=0,
-                    throw=True,
-                )
+            process_document.apply(
+                kwargs={
+                    "doc_id": "d-1",
+                    "tenant_id": "t-1",
+                    "job_id": "j-1",
+                    "r2_uri": "r2://bucket/flaky.pdf",
+                },
+                retries=0,
+                throw=True,
+            )
 
         mock_dlq.assert_not_called()

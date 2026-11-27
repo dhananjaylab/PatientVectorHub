@@ -1,6 +1,6 @@
 """Focused regression tests for api-gateway/src/config.py."""
 
-from src.config import Settings, normalize_asyncpg_url
+from src.config import Settings, normalize_asyncpg_pool_url, normalize_asyncpg_url
 
 
 def test_normalize_asyncpg_url_preserves_async_driver_and_strips_ssl_runtime_params():
@@ -11,9 +11,15 @@ def test_normalize_asyncpg_url_preserves_async_driver_and_strips_ssl_runtime_par
 
     normalized = normalize_asyncpg_url(raw_url)
 
-    assert normalized == (
-        "postgresql+asyncpg://user:pass@host:5432/db?application_name=api"
+    assert normalized == ("postgresql+asyncpg://user:pass@host:5432/db?application_name=api")
+
+
+def test_normalize_asyncpg_pool_url_uses_plain_postgresql_scheme():
+    normalized = normalize_asyncpg_pool_url(
+        "postgresql+asyncpg://user:pass@host:5432/db?ssl=require"
     )
+
+    assert normalized == "postgresql://user:pass@host:5432/db"
 
 
 class TestKeycloakSettings:
@@ -37,8 +43,7 @@ class TestKeycloakSettings:
             KEYCLOAK_REALM="patientvectorhub",
             KEYCLOAK_ISSUER="http://localhost:8443/realms/patientvectorhub",
             KEYCLOAK_JWKS_URL=(
-                "http://localhost:8443/realms/patientvectorhub/"
-                "protocol/openid-connect/certs"
+                "http://localhost:8443/realms/patientvectorhub/protocol/openid-connect/certs"
             ),
         )
 

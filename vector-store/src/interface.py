@@ -19,6 +19,8 @@ ingestion's embedders to do this itself).
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
+from .config import settings
+
 
 @dataclass
 class Chunk:
@@ -89,13 +91,10 @@ def get_store(tenant_id: str | None) -> VectorStoreInterface:
     (scripts/dr_switch_to_qdrant.sh), on the assumption Weaviate is the
     one that's down and shouldn't keep receiving writes.
     """
-    import os
-
     if not tenant_id:
         tenant_id = "default"
 
-    backend = os.getenv("VECTOR_BACKEND", "weaviate")
-    if backend == "qdrant":
+    if settings.VECTOR_BACKEND == "qdrant":
         from .qdrant_store import QdrantStore
 
         return QdrantStore(tenant_id)

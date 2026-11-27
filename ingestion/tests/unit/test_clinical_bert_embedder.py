@@ -4,16 +4,16 @@ Unit tests for ingestion/src/embeddings/clinical_bert_embedder.py (ADR-012)
 real network calls, no deployed endpoint needed to run this file.
 """
 
-import os
-
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
 
 def _fake_client(feature_extraction_mock):
     client = MagicMock()
     client.feature_extraction = feature_extraction_mock
     return client
+
 
 class TestEmbedBatch:
     @pytest.mark.asyncio
@@ -151,6 +151,7 @@ class TestEmbedBatch:
             settings.HF_TOKEN = original_token
             clinical_bert_embedder._client = None
 
+
 class TestIsRetryableHfError:
     """_is_retryable_hf_error() drives the retry decorator's predicate —
     tested directly since constructing real HfHubHTTPError instances with
@@ -191,5 +192,3 @@ class TestIsRetryableHfError:
         from src.embeddings.clinical_bert_embedder import _is_retryable_hf_error
 
         assert _is_retryable_hf_error(ValueError("not an HF error")) is False
-
-

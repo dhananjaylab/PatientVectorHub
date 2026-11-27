@@ -11,17 +11,17 @@ the point AuditLogMiddleware imports them (inside the function, not
 module scope — see that module's own docstring for why), matching this
 codebase's own established mocking granularity.
 """
+
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
-from starlette.middleware.base import BaseHTTPMiddleware
-
 from src.middleware.audit_log import AuditLogMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 
 def _build_app(*, tenant_id: str | None, role: str = "readonly", route_status: int = 403):
@@ -83,8 +83,9 @@ class TestIpAddressPopulation:
 
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            with patch("src.db.crud.write_audit_log", new_callable=AsyncMock), patch(
-                "src.db.session.get_tenant_session"
+            with (
+                patch("src.db.crud.write_audit_log", new_callable=AsyncMock),
+                patch("src.db.session.get_tenant_session"),
             ):
                 await client.get("/protected")
 
@@ -144,9 +145,7 @@ class TestAccessDeniedLogging:
         mock_write_audit_log.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_audit_write_failure_does_not_turn_403_into_500(
-        self, mock_get_tenant_session
-    ):
+    async def test_audit_write_failure_does_not_turn_403_into_500(self, mock_get_tenant_session):
         """The response was already correctly built (403) before the
         audit side-effect runs -- a DB hiccup while logging must not
         change what the caller sees."""

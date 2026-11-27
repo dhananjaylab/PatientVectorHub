@@ -24,6 +24,7 @@ Two tasks:
                              wrongly-flagged document costs one wasted
                              embedding call, nothing worse.
 """
+
 import contextlib
 import logging
 import time
@@ -79,28 +80,33 @@ def cleanup_completed_jobs() -> None:
                 if result.rowcount:
                     log.info(
                         "cleaned up %d stale ingestion_jobs for tenant %s",
-                        result.rowcount, tenant_id,
+                        result.rowcount,
+                        tenant_id,
                     )
 
 
 @celery_app.task(name="pvh.requeue_stale_documents")
 def requeue_stale_documents() -> None:
     from .batch_worker import process_document  # local import — avoids a
-                                                   # celery_app <-> batch_worker
-                                                   # import-order issue at module load
+    # celery_app <-> batch_worker
+    # import-order issue at module load
 
     with _track_scheduled_task("pvh.requeue_stale_documents"):
         for tenant_id in get_all_tenant_ids():
             with get_tenant_sync_session(tenant_id) as db:
-                stale = db.execute(
-                    text(
-                        "SELECT id, document_type, source_path, ingestion_job_id"
-                        " FROM documents"
-                        " WHERE embedding_status = 'processing'"
-                        "   AND ingested_at < NOW() - INTERVAL :threshold"
-                    ),
-                    {"threshold": _STALE_PROCESSING_THRESHOLD},
-                ).mappings().all()
+                stale = (
+                    db.execute(
+                        text(
+                            "SELECT id, document_type, source_path, ingestion_job_id"
+                            " FROM documents"
+                            " WHERE embedding_status = 'processing'"
+                            "   AND ingested_at < NOW() - INTERVAL :threshold"
+                        ),
+                        {"threshold": _STALE_PROCESSING_THRESHOLD},
+                    )
+                    .mappings()
+                    .all()
+                )
 
                 for row in stale:
                     db.execute(

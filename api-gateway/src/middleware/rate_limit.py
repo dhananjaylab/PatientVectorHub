@@ -181,5 +181,3 @@ async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) 
     for key, value in probe.headers.items():
         response.headers[key] = value
     return response
-
-

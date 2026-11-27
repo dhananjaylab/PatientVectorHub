@@ -38,6 +38,7 @@ route currently displays a decrypted MRN; see ADR-017 for the scope
 note on why phi_reveal in the audit log is a separate UUID, not this
 field).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -53,7 +54,7 @@ from .config import settings
 log = logging.getLogger(__name__)
 
 _vault_client: hvac.Client | None = None
-_redis_client: "redis_asyncio.Redis | None" = None
+_redis_client: redis_asyncio.Redis | None = None
 
 
 class VaultUnavailableError(RuntimeError):
@@ -71,7 +72,7 @@ def get_vault_client() -> hvac.Client:
     return _vault_client
 
 
-def _get_redis_client() -> "redis_asyncio.Redis":
+def _get_redis_client() -> redis_asyncio.Redis:
     global _redis_client
     if _redis_client is None:
         _redis_client = redis_asyncio.Redis.from_url(settings.REDIS_URL)

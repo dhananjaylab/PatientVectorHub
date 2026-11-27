@@ -1,11 +1,11 @@
 """Unit tests for api-gateway/src/middleware/rbac.py."""
-import sys
-import os
-import pytest
+
 from unittest.mock import MagicMock
 
+import pytest
 from fastapi import HTTPException  # noqa: E402
-from src.middleware.rbac import require_role, require_min_role  # noqa: E402
+from src.middleware.rbac import require_min_role, require_role  # noqa: E402
+
 
 def _fake_request(role: str | None):
     request = MagicMock()
@@ -15,6 +15,7 @@ def _fake_request(role: str | None):
         request.state = MagicMock(spec=["role"])
         request.state.role = role
     return request
+
 
 class TestRequireRole:
     def test_allows_matching_role(self):
@@ -39,6 +40,7 @@ class TestRequireRole:
         with pytest.raises(HTTPException) as exc_info:
             checker(request)
         assert "readonly" in exc_info.value.detail
+
 
 class TestRequireMinRole:
     @pytest.mark.parametrize(

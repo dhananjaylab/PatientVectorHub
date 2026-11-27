@@ -16,17 +16,23 @@ omissions in the test's own content, not artifacts of the move --
 proof this file had never actually been executed successfully before,
 regardless of location.
 """
+
 import json
 import logging
-from io import StringIO
+
 from src.logging_config import JsonFormatter, configure_logging
+
 
 class TestJsonFormatter:
     def _get_record(self, msg: str, level=logging.INFO) -> logging.LogRecord:
         record = logging.LogRecord(
-            name="test.logger", level=level,
-            pathname="", lineno=0, msg=msg,
-            args=(), exc_info=None,
+            name="test.logger",
+            level=level,
+            pathname="",
+            lineno=0,
+            msg=msg,
+            args=(),
+            exc_info=None,
         )
         return record
 
@@ -39,10 +45,10 @@ class TestJsonFormatter:
     def test_output_has_required_fields(self):
         fmt = JsonFormatter()
         parsed = json.loads(fmt.format(self._get_record("test")))
-        assert "time"    in parsed
-        assert "level"   in parsed
-        assert "logger"  in parsed
-        assert "msg"     in parsed
+        assert "time" in parsed
+        assert "level" in parsed
+        assert "logger" in parsed
+        assert "msg" in parsed
         assert "service" in parsed
 
     def test_message_preserved(self):
@@ -76,19 +82,18 @@ class TestJsonFormatter:
         assert "T" in parsed["time"]
         assert "Z" in parsed["time"]
 
+
 class TestConfigureLogging:
     def test_configure_logging_does_not_raise(self):
-        configure_logging("INFO")   # should complete silently
+        configure_logging("INFO")  # should complete silently
 
     def test_configure_logging_sets_level(self):
         configure_logging("DEBUG")
         root = logging.getLogger()
         assert root.level == logging.DEBUG
-        configure_logging("INFO")   # reset
+        configure_logging("INFO")  # reset
 
     def test_root_logger_has_handler_after_configure(self):
         configure_logging("INFO")
         root = logging.getLogger()
         assert len(root.handlers) >= 1
-
-

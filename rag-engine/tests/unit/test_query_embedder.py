@@ -4,11 +4,10 @@ network clients are mocked — no live OpenAI/HF endpoint needed to run this
 file.
 """
 
-import os
-
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
 
 class TestProviderDispatch:
     @pytest.mark.asyncio
@@ -52,6 +51,7 @@ class TestProviderDispatch:
             await query_embedder.embed_query("text")
         settings.EMBEDDING_PROVIDER = "openai"  # reset for other tests
 
+
 class TestOpenAIEmbedQuery:
     @pytest.mark.asyncio
     async def test_calls_embeddings_create_with_correct_args(self):
@@ -90,6 +90,7 @@ class TestOpenAIEmbedQuery:
         query_embedder._openai_client = None
         client = query_embedder._get_openai_client()
         assert client is not None  # constructed with "not-configured", not empty string
+
 
 class TestClinicalBertEmbedQuery:
     @pytest.mark.asyncio

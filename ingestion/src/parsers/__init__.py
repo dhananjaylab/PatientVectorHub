@@ -5,6 +5,7 @@ for R2 it's shaped like
   r2://{bucket}/raw/{tenant_id}/{patient_id}/{doc_id}/original.{ext}
 matching what scripts/seed_data.py's sample documents already write.
 """
+
 from .hl7_parser import HL7Parser
 from .pdf_parser import PDFParser
 from .plain_text_parser import PlainTextParser

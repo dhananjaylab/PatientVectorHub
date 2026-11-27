@@ -36,6 +36,7 @@ Phase 8 changes (ADR-015):
     added the identical import for rag_engine's cross-package reach into
     vector_store.
 """
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -173,6 +174,7 @@ async def get_namespaces(
         healthy = await store.health_check()
     finally:
         import inspect
+
         close_method = getattr(store, "close", None)
         if callable(close_method):
             res = close_method()
@@ -184,6 +186,3 @@ async def get_namespaces(
         backend=settings.VECTOR_BACKEND,
         healthy=healthy,
     )
-
-
-

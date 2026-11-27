@@ -11,6 +11,7 @@ URI instead of an inline JSON array — flagged as a Phase 4+ enhancement,
 not blocking; scripts/load_test_ingestion.py bypasses this constraint
 entirely by talking to the DB/Celery layer directly for load testing.
 """
+
 from __future__ import annotations
 
 from pydantic import BaseModel, Field, computed_field

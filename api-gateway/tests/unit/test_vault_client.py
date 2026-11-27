@@ -8,13 +8,13 @@ requiring a live Redis). A separate
 tests/integration/test_vault_transit_integration.py (not this file)
 exercises a real Vault dev-server round trip.
 """
+
 from __future__ import annotations
 
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from src import vault_client
 
 
@@ -73,7 +73,6 @@ class TestEncryptDecryptSync:
         base64 round trip, rather than mocking decrypt to just echo
         whatever encrypt was called with -- proves the base64
         encode/decode framing on both sides is actually symmetric."""
-        import base64
 
         mock_client = MagicMock()
 
@@ -144,9 +143,7 @@ class TestAsyncWrappers:
             fake_redis.set.side_effect = ConnectionError("redis down")
             with (
                 patch.object(vault_client, "_get_redis_client", return_value=fake_redis),
-                patch.object(
-                    vault_client, "encrypt_phi_sync", return_value="vault:v1:xyz"
-                ),
+                patch.object(vault_client, "encrypt_phi_sync", return_value="vault:v1:xyz"),
             ):
                 result = await vault_client.encrypt_phi("MRN-1")
             return result
@@ -161,9 +158,7 @@ class TestAsyncWrappers:
             fake_redis = AsyncMock()
             with (
                 patch.object(vault_client, "_get_redis_client", return_value=fake_redis),
-                patch.object(
-                    vault_client, "decrypt_phi_sync", return_value="MRN-1"
-                ) as mock_sync,
+                patch.object(vault_client, "decrypt_phi_sync", return_value="MRN-1") as mock_sync,
             ):
                 result = await vault_client.decrypt_phi("vault:v1:xyz")
             mock_sync.assert_called_once_with("vault:v1:xyz")
@@ -184,9 +179,11 @@ class TestFailClosedGuardrail:
         mock_get_client.assert_not_called()
 
     def test_raises_when_allow_real_phi_true_and_vault_unreachable(self):
-        with patch.object(vault_client, "is_vault_healthy", return_value=False):
-            with pytest.raises(vault_client.VaultUnavailableError, match="unreachable"):
-                vault_client.require_vault_or_fail_closed(allow_real_phi=True)
+        with (
+            patch.object(vault_client, "is_vault_healthy", return_value=False),
+            pytest.raises(vault_client.VaultUnavailableError, match="unreachable"),
+        ):
+            vault_client.require_vault_or_fail_closed(allow_real_phi=True)
 
     def test_raises_when_transit_key_missing(self):
         mock_client = MagicMock()
@@ -194,9 +191,9 @@ class TestFailClosedGuardrail:
         with (
             patch.object(vault_client, "is_vault_healthy", return_value=True),
             patch.object(vault_client, "get_vault_client", return_value=mock_client),
+            pytest.raises(vault_client.VaultUnavailableError, match="transit key"),
         ):
-            with pytest.raises(vault_client.VaultUnavailableError, match="transit key"):
-                vault_client.require_vault_or_fail_closed(allow_real_phi=True)
+            vault_client.require_vault_or_fail_closed(allow_real_phi=True)
 
     def test_passes_when_vault_healthy_and_key_exists(self):
         mock_client = MagicMock()

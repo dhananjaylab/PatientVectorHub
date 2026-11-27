@@ -7,6 +7,7 @@ Create Date: 2025-06-01 00:00:00
 Phase 1: empty migration — proves Alembic wiring works.
 Phase 2 adds the real table DDL.
 """
+
 from alembic import op
 
 # revision identifiers

@@ -1,16 +1,27 @@
 import unittest
-
-from weaviate.classes.config import Configure, VectorDistances
+from unittest.mock import MagicMock
 
 from scripts.setup_weaviate_schema import (
     COLLECTION_NAME,
+    TENANT_IDS,
     build_vector_index_config,
+    ensure_tenants,
 )
+from weaviate.classes.config import Configure, VectorDistances
+
 
 class WeaviateSchemaTestCase(unittest.TestCase):
     def test_collection_name_is_shared(self) -> None:
         """The collection name must be the single shared constant, not per-tenant."""
         self.assertEqual(COLLECTION_NAME, "PatientDocument")
+
+    def test_existing_tenants_are_kept_and_missing_tenants_created(self) -> None:
+        collection = MagicMock()
+        collection.tenants.get.return_value = {TENANT_IDS[0]: MagicMock()}
+
+        ensure_tenants(collection)
+
+        collection.tenants.create.assert_called_once_with([TENANT_IDS[1]])
 
     def test_build_vector_index_config_uses_hfresh_for_cloud(self) -> None:
         """Weaviate Cloud only allows hfresh; verify the cloud path returns it."""
@@ -29,6 +40,7 @@ class WeaviateSchemaTestCase(unittest.TestCase):
             vector_distances=VectorDistances,
         )
         self.assertEqual(type(config).__name__, "_VectorIndexConfigHNSWCreate")
+
 
 if __name__ == "__main__":
     unittest.main()

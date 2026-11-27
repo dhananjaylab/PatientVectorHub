@@ -60,10 +60,11 @@ def _ensure_cross_package_alias(target_src_dir: str, module_name: str) -> None:
         # If cross-package dependencies are missing, register a placeholder
         # module so tests that don't need these packages can still run
         import warnings
+
         warnings.warn(
-            f"Could not import {module_name}: {e}. "
-            f"Tests requiring {module_name} will fail.",
-            ImportWarning
+            f"Could not import {module_name}: {e}. Tests requiring {module_name} will fail.",
+            ImportWarning,
+            stacklevel=2,
         )
         # Keep the empty module registered to avoid repeated import attempts
         pass

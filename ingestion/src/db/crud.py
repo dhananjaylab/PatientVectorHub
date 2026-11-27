@@ -10,6 +10,7 @@ pre-Phase-4 codebase — they were sketched in the original reference docs
 adding them, and no sync equivalent existed for the ingestion side at
 all. This is genuinely new code, not a port.
 """
+
 from sqlalchemy import text
 
 from .session import get_tenant_sync_session

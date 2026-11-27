@@ -16,6 +16,7 @@ api-gateway/src/kafka_utils.py's docstring for the full rationale.
 explicitly out of scope for Phase 4 — see
 docs/PHASE_4_IMPLEMENTATION_PLAN.md's completion notes.
 """
+
 import json
 import logging
 
@@ -102,7 +103,7 @@ async def run_stream_consumer() -> None:
                     },
                     queue="doc-ingest",
                 )
-                await consumer.commit()   # only commit after successful dispatch
+                await consumer.commit()  # only commit after successful dispatch
                 kafka_messages_consumed_total.labels(topic=msg.topic).inc()
 
                 dispatched_since_last_sample += 1
@@ -119,4 +120,5 @@ async def run_stream_consumer() -> None:
 
 if __name__ == "__main__":
     import asyncio
+
     asyncio.run(run_stream_consumer())

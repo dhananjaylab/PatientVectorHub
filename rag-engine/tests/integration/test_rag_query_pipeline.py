@@ -62,8 +62,8 @@ class TestRAGSynthesizerLive:
         parsing (message.content[0].text) against the real API — the
         one thing every mock-based unit test in test_llm_router.py and
         test_rag_synthesizer.py cannot prove by construction."""
-        from vector_store.interface import SearchResult
         from src.synthesizer import RAGSynthesizer
+        from vector_store.interface import SearchResult
 
         chunks = [
             SearchResult(
@@ -110,9 +110,9 @@ class TestFullQueryPipelineLive:
         that exercises retriever.retrieve() at all — every other
         reference to it (test_retriever.py) mocks both embed_query() and
         get_store()."""
-        from vector_store.interface import Chunk
         from src.retriever import retrieve
         from src.synthesizer import RAGSynthesizer
+        from vector_store.interface import Chunk
         from vector_store.weaviate_store import WeaviateStore
 
         doc_id = str(uuid.uuid4())
@@ -145,4 +145,3 @@ class TestFullQueryPipelineLive:
         finally:
             await store.delete(doc_id)
             await store.close()
-

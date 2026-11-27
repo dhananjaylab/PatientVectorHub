@@ -281,6 +281,10 @@ Synthetic users created by `infra\scripts\seed_data.py`:
 All synthetic test users share the Keycloak password:
 
 ```text
+bin\kc.bat start-dev --bootstrap-admin-username=admin --bootstrap-admin-password=admin
+```
+
+```text
 test-password-123
 ```
 
@@ -330,7 +334,7 @@ The `PatientDocument` Weaviate collection uses **native multi-tenancy** — one 
 
 ```python
 collection = client.collections.get("PatientDocument")
-tenant_col = collection.with_tenant(tenant_id)   # shard-scoped — cross-tenant reads are impossible
+tenant_col = collection.with_tenant(tenant_id)  # shard-scoped — cross-tenant reads are impossible
 
 tenant_col.data.insert({"chunk_text": "...", "document_id": "..."}, vector=[...])
 tenant_col.query.near_vector(near_vector=[...], limit=10)

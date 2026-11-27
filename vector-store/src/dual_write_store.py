@@ -77,5 +77,3 @@ class DualWriteVectorStore(VectorStoreInterface):
             result = close()
             if inspect.isawaitable(result):
                 await result
-
-

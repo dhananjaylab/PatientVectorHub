@@ -49,8 +49,14 @@ router = APIRouter()
 # up front, and deriving them from rows[0] breaks outright on an empty
 # (zero-match) export. Matches AuditLogEntry's field order exactly.
 _EXPORT_FIELDS = [
-    "id", "user_id", "action", "patient_id", "ip_address",
-    "request_id", "status_code", "created_at",
+    "id",
+    "user_id",
+    "action",
+    "patient_id",
+    "ip_address",
+    "request_id",
+    "status_code",
+    "created_at",
 ]
 
 # Safety cap on export size — GET /logs/export has no limit/offset (it's
@@ -94,7 +100,9 @@ def _resolve_effective_user_id(user: dict, requested_user_id: str | None) -> str
     return user["user_id"]
 
 
-@router.get("/logs", response_model=AuditLogListResponse, dependencies=[require_min_role("auditor")])
+@router.get(
+    "/logs", response_model=AuditLogListResponse, dependencies=[require_min_role("auditor")]
+)
 @limiter.limit("200/minute")
 async def get_audit_logs(
     request: Request,
@@ -170,13 +178,16 @@ async def export_audit_logs(
             "row_count": len(rows),
             "truncated": result["total"] > _EXPORT_ROW_CAP,
             "filters": {
-                "action": action, "user_id": user_id, "patient_id": patient_id,
-                "from_ts": from_ts, "to_ts": to_ts,
+                "action": action,
+                "user_id": user_id,
+                "patient_id": patient_id,
+                "from_ts": from_ts,
+                "to_ts": to_ts,
             },
         },
     )
 
-    filename_stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    filename_stamp = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%SZ")
 
     if format == "json":
         import json as _json
@@ -185,7 +196,9 @@ async def export_audit_logs(
         return StarletteResponse(
             body,
             media_type="application/json",
-            headers={"Content-Disposition": f'attachment; filename="audit-logs-{filename_stamp}.json"'},
+            headers={
+                "Content-Disposition": f'attachment; filename="audit-logs-{filename_stamp}.json"'
+            },
         )
 
     buf = io.StringIO()
@@ -231,5 +244,3 @@ async def log_phi_reveal(
         status_code=204,
         metadata={"revealed_audit_log_id": body.audit_log_id},
     )
-
-

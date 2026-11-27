@@ -24,7 +24,9 @@ class TestRetrieve:
             patch.object(
                 retriever, "embed_query", new=AsyncMock(return_value=[0.1, 0.2, 0.3])
             ) as mocked_embed,
-            patch.object(retriever, "get_store", return_value=mock_vector_store) as mocked_get_store,
+            patch.object(
+                retriever, "get_store", return_value=mock_vector_store
+            ) as mocked_get_store,
         ):
             results = await retriever.retrieve("tenant-a", "diabetes with elevated HbA1c", top_k=5)
 

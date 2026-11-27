@@ -58,8 +58,11 @@ class TestCreateApiKey:
     async def test_admin_can_create_key(self):
         app = _build_app(role="admin", user_id="admin-1")
         create_result = {
-            "key_id": "k-1", "key_plaintext": "pvh_secret123", "name": "svc-key",
-            "scopes": ["query:read"], "expires_at": "2027-01-01T00:00:00+00:00",
+            "key_id": "k-1",
+            "key_plaintext": "pvh_secret123",
+            "name": "svc-key",
+            "scopes": ["query:read"],
+            "expires_at": "2027-01-01T00:00:00+00:00",
         }
         with (
             patch(
@@ -138,11 +141,14 @@ class TestListApiKeys:
         app = _build_app(role="admin")
         rows = [
             {
-                "id": uuid.uuid4(), "name": "svc-key", "scopes": ["query:read"],
+                "id": uuid.uuid4(),
+                "name": "svc-key",
+                "scopes": ["query:read"],
                 "user_id": uuid.uuid4(),
-                "expires_at": datetime.datetime(2027, 1, 1, tzinfo=datetime.timezone.utc),
-                "is_revoked": False, "last_used_at": None,
-                "created_at": datetime.datetime(2026, 8, 1, tzinfo=datetime.timezone.utc),
+                "expires_at": datetime.datetime(2027, 1, 1, tzinfo=datetime.UTC),
+                "is_revoked": False,
+                "last_used_at": None,
+                "created_at": datetime.datetime(2026, 8, 1, tzinfo=datetime.UTC),
             }
         ]
         with patch("src.routers.admin.crud.list_api_keys", new=AsyncMock(return_value=rows)):
@@ -171,9 +177,12 @@ class TestGetUsers:
         app = _build_app(role="admin")
         rows = [
             {
-                "id": uuid.uuid4(), "email": "engineer@tenant1.test", "role": "engineer",
-                "is_active": True, "last_login": None,
-                "created_at": datetime.datetime(2026, 7, 1, tzinfo=datetime.timezone.utc),
+                "id": uuid.uuid4(),
+                "email": "engineer@tenant1.test",
+                "role": "engineer",
+                "is_active": True,
+                "last_login": None,
+                "created_at": datetime.datetime(2026, 7, 1, tzinfo=datetime.UTC),
             }
         ]
         with patch("src.routers.admin.crud.list_users", new=AsyncMock(return_value=rows)):
@@ -250,4 +259,3 @@ class TestVectorStoreNamespaceHealth:
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
                 resp = await c.get("/v1/admin/vector-store/namespaces")
         assert resp.status_code == 403
-

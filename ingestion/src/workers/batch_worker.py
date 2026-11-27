@@ -16,17 +16,18 @@ requires the vector-store/src package to be importable from ingestion's
 runtime — see MANUAL_INTEGRATION_NOTES.md for exactly what that requires
 (this repo's per-service-venv layout doesn't do this automatically).
 """
+
 import asyncio
 import logging
 import time
 
-from .celery_app import celery_app
 from ..chunkers.splitter import RawChunk, chunk_text
 from ..config import settings
 from ..db.crud import mark_document_failed, update_document_embedding_status, update_job_progress
 from ..embeddings import embed_batch  # ADR-012: provider-dispatched (EMBEDDING_PROVIDER)
 from ..observability import document_processing_duration_seconds, documents_processed_total
 from ..parsers import get_parser_for_uri
+from .celery_app import celery_app
 from .dlq_producer import publish_to_dlq_sync
 
 log = logging.getLogger(__name__)
@@ -77,8 +78,10 @@ def process_document(
         vectors = asyncio.run(embed_batch([c.text for c in raw_chunks]))
         chunks = _to_vector_chunks(raw_chunks, document_type, patient_id_hash)
 
-        from vector_store.interface import get_store  # local import — see module docstring
         import inspect
+
+        from vector_store.interface import get_store  # local import — see module docstring
+
         store = get_store(tenant_id)
         try:
             asyncio.run(store.upsert(doc_id, chunks, vectors))
@@ -87,10 +90,12 @@ def process_document(
             if inspect.isawaitable(close_result):
                 asyncio.run(close_result)
 
-
         update_document_embedding_status(
-            tenant_id, doc_id, "completed",
-            chunk_count=len(chunks), model_version=settings.EMBEDDING_MODEL_VERSION,
+            tenant_id,
+            doc_id,
+            "completed",
+            chunk_count=len(chunks),
+            model_version=settings.EMBEDDING_MODEL_VERSION,
         )
         update_job_progress(tenant_id, job_id, increment=1)
         log.info("processed doc_id=%s job_id=%s chunks=%d", doc_id, job_id, len(chunks))
@@ -107,7 +112,10 @@ def process_document(
     except Exception as exc:
         log.error(
             "process_document failed doc_id=%s attempt=%d/%d: %s",
-            doc_id, self.request.retries, self.max_retries, exc,
+            doc_id,
+            self.request.retries,
+            self.max_retries,
+            exc,
         )
         if self.request.retries >= self.max_retries:
             # Terminal failure. Route to Kafka DLQ, mark the document
@@ -116,17 +124,18 @@ def process_document(
             # fights the DLQ routing (see plan §6).
             publish_to_dlq_sync(
                 payload={
-                    "doc_id": doc_id, "job_id": job_id, "tenant_id": tenant_id,
-                    "r2_uri": r2_uri, "document_type": document_type,
+                    "doc_id": doc_id,
+                    "job_id": job_id,
+                    "tenant_id": tenant_id,
+                    "r2_uri": r2_uri,
+                    "document_type": document_type,
                 },
                 error=str(exc),
             )
             mark_document_failed(tenant_id, doc_id, job_id, str(exc))
-            documents_processed_total.labels(
-                status="failed", document_type=document_type
-            ).inc()
+            documents_processed_total.labels(status="failed", document_type=document_type).inc()
             document_processing_duration_seconds.labels(document_type=document_type).observe(
                 time.perf_counter() - start
             )
             return
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc) from exc
