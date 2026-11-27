@@ -32,6 +32,7 @@ natively on the same 4317 gRPC port JAEGER_ENDPOINT already pointed at
 before this phase existed -- no code here had to change to account for
 that, only the compose file's image tag.
 """
+
 from __future__ import annotations
 
 import logging
@@ -140,9 +141,7 @@ async def metrics_middleware(request, call_next):
     http_requests_total.labels(
         method=request.method, route=route_path, status_code=str(response.status_code)
     ).inc()
-    http_request_duration_seconds.labels(method=request.method, route=route_path).observe(
-        duration
-    )
+    http_request_duration_seconds.labels(method=request.method, route=route_path).observe(duration)
     return response
 
 
@@ -190,9 +189,7 @@ def configure_tracing(app: FastAPI) -> None:
     # excluded_urls keeps liveness/readiness/scrape traffic out of Jaeger --
     # every probe hitting these on a ~10s interval would otherwise dwarf
     # actual request traces with pure noise.
-    FastAPIInstrumentor.instrument_app(
-        app, excluded_urls="/health,/ready,/metrics"
-    )
+    FastAPIInstrumentor.instrument_app(app, excluded_urls="/health,/ready,/metrics")
 
     from .db.session import get_engine
 

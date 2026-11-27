@@ -19,11 +19,12 @@ superuser and bypasses RLS anyway, masking the difference).
 Usage:
     python scripts/verify_seed.py
 """
+
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from seed_data import TENANT_A, TENANT_B, TENANTS, get_database_url  # noqa: E402
+from seed_data import TENANTS, get_database_url  # noqa: E402
 
 try:
     from sqlalchemy import create_engine, text
@@ -36,9 +37,7 @@ def main() -> None:
     engine = create_engine(get_database_url(), pool_pre_ping=True)
 
     with engine.connect() as conn:
-        revision = conn.execute(
-            text("SELECT version_num FROM alembic_version")
-        ).scalar()
+        revision = conn.execute(text("SELECT version_num FROM alembic_version")).scalar()
         print(f"revision   {revision}")
 
         # tenants has no tenant_id column and is not RLS-scoped —
@@ -63,7 +62,7 @@ def main() -> None:
         print(f"users      {total_users}")
         print(f"patients   {total_patients}")
 
-        expected_users = len(TENANTS) * 4       # 4 roles per tenant
+        expected_users = len(TENANTS) * 4  # 4 roles per tenant
         expected_patients = len(TENANTS) * 1000
         ok = (
             tenant_count == len(TENANTS)

@@ -14,8 +14,9 @@ the Phase 1 get_sync_session() had NO tenant scoping at all and would
 silently see zero rows against any non-superuser DB role (Aiven included
 — see ADR-010's identical caveat for the API-key resolver).
 """
+
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Iterator
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session

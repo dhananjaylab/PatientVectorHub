@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from src.config import settings
 
+
 class TestGetStore:
     def test_default_returns_dual_write_store(self):
         from src.dual_write_store import DualWriteVectorStore
@@ -57,9 +58,7 @@ class TestGetStore:
         from src.interface import get_store
         from src.qdrant_store import QdrantStore
 
-        with patch.object(settings, "VECTOR_BACKEND", "qdrant"), patch(
-            "src.qdrant_store._connect"
-        ):
+        with patch.object(settings, "VECTOR_BACKEND", "qdrant"), patch("src.qdrant_store._connect"):
             store = get_store("tenant-a")
 
         assert isinstance(store, QdrantStore)

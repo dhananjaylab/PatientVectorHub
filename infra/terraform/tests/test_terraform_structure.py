@@ -23,6 +23,7 @@ metadata. `_unwrap()` below undoes that -- checked by dumping real
 parse output during this session, not assumed from an older hcl2
 version's documented shape (the two are not compatible).
 """
+
 from __future__ import annotations
 
 import re
@@ -39,9 +40,9 @@ CLUSTER_DIR = TF_ROOT / "cluster"
 ALL_TF_FILES = sorted(BOOTSTRAP_DIR.glob("*.tf")) + sorted(CLUSTER_DIR.glob("*.tf"))
 
 SECRET_LOOKALIKE = re.compile(
-    r"(AKIA[0-9A-Z]{16})"                     # AWS access key id shape
+    r"(AKIA[0-9A-Z]{16})"  # AWS access key id shape
     r"|(-----BEGIN [A-Z ]*PRIVATE KEY-----)"  # PEM private key
-    r"|(xox[baprs]-[0-9A-Za-z-]{10,})",       # Slack token shape, just in case
+    r"|(xox[baprs]-[0-9A-Za-z-]{10,})",  # Slack token shape, just in case
 )
 
 _META_KEYS = {"__is_block__", "__comments__", "__inline_comments__"}
@@ -114,13 +115,15 @@ class TestBootstrapStack:
             "the tfstate bucket must have prevent_destroy=true -- it must outlive "
             "every cluster/ terraform destroy"
         )
-        assert _labeled_resources(parsed, "aws_s3_bucket_versioning"), "state bucket must have versioning enabled"
-        assert _labeled_resources(
-            parsed, "aws_s3_bucket_server_side_encryption_configuration"
-        ), "state bucket must have SSE configured"
-        assert _labeled_resources(
-            parsed, "aws_s3_bucket_public_access_block"
-        ), "state bucket must have a public access block"
+        assert _labeled_resources(parsed, "aws_s3_bucket_versioning"), (
+            "state bucket must have versioning enabled"
+        )
+        assert _labeled_resources(parsed, "aws_s3_bucket_server_side_encryption_configuration"), (
+            "state bucket must have SSE configured"
+        )
+        assert _labeled_resources(parsed, "aws_s3_bucket_public_access_block"), (
+            "state bucket must have a public access block"
+        )
 
     def test_no_dynamodb_lock_table_anywhere_in_bootstrap(self):
         """Confirms the S3-native-locking design choice -- a regression here
@@ -175,7 +178,9 @@ class TestClusterStack:
     def test_eks_uses_auto_mode(self):
         parsed = _load(CLUSTER_DIR / "eks.tf")
         modules = _labeled_blocks(parsed, "module")
-        eks_modules = [m for m in modules.values() if m.get("source") == "terraform-aws-modules/eks/aws"]
+        eks_modules = [
+            m for m in modules.values() if m.get("source") == "terraform-aws-modules/eks/aws"
+        ]
         assert len(eks_modules) == 1
         assert eks_modules[0].get("compute_config", {}).get("enabled") is True
 
@@ -204,7 +209,9 @@ class TestClusterStack:
     def test_environment_variable_is_validated(self):
         parsed = _load(CLUSTER_DIR / "variables.tf")
         variables = _labeled_blocks(parsed, "variable")
-        assert "validation" in variables["environment"], "environment must be validated to dev/staging/production"
+        assert "validation" in variables["environment"], (
+            "environment must be validated to dev/staging/production"
+        )
 
     def test_no_always_on_assumption_leaked_into_defaults(self):
         """Guards decision 1 (review-window, not continuous): nothing here

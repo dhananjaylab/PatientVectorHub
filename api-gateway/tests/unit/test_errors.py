@@ -1,10 +1,19 @@
 """Unit tests for the PVH custom exception hierarchy."""
+
 import pytest
 from src.errors import (
-    PVHError, AuthenticationError, AuthorizationError,
-    IngestionError, EmbeddingError, VectorStoreError,
-    QueryError, LLMError, NotFoundError, TenantMismatchError,
+    AuthenticationError,
+    AuthorizationError,
+    EmbeddingError,
+    IngestionError,
+    LLMError,
+    NotFoundError,
+    PVHError,
+    QueryError,
+    TenantMismatchError,
+    VectorStoreError,
 )
+
 
 class TestPVHErrorHierarchy:
     def test_pvh_error_is_exception(self):
@@ -36,6 +45,7 @@ class TestPVHErrorHierarchy:
 
     def test_tenant_mismatch_status(self):
         assert TenantMismatchError.status_code == 403
+
 
 class TestPVHErrorInstantiation:
     def test_error_has_message(self):
@@ -72,12 +82,20 @@ class TestPVHErrorInstantiation:
         with pytest.raises(IngestionError):
             raise EmbeddingError("embedding service down")
 
+
 class TestErrorCodeUniqueness:
     def test_all_error_codes_unique(self):
         errors = [
-            PVHError, AuthenticationError, AuthorizationError,
-            IngestionError, EmbeddingError, VectorStoreError,
-            QueryError, LLMError, NotFoundError, TenantMismatchError,
+            PVHError,
+            AuthenticationError,
+            AuthorizationError,
+            IngestionError,
+            EmbeddingError,
+            VectorStoreError,
+            QueryError,
+            LLMError,
+            NotFoundError,
+            TenantMismatchError,
         ]
         codes = [e.error_code for e in errors]
         assert len(codes) == len(set(codes)), "Duplicate error codes found"

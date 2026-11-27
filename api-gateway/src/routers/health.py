@@ -1,6 +1,7 @@
 """Health check routes — K8s liveness (/health) and readiness (/ready)."""
-import time
+
 import logging
+import time
 
 from fastapi import APIRouter
 from starlette.requests import Request
@@ -15,9 +16,9 @@ _start = time.time()
 async def liveness() -> dict:
     """Liveness probe — is the process alive?"""
     return {
-        "status":   "alive",
+        "status": "alive",
         "uptime_s": round(time.time() - _start),
-        "service":  "pvh-api-gateway",
+        "service": "pvh-api-gateway",
     }
 
 
@@ -58,9 +59,8 @@ async def readiness(request: Request) -> JSONResponse:
     checks["kafka"] = "ok" if kafka else "not_initialized"
 
     # Ready when postgres is ok OR not yet initialized (Phase 1)
-    postgres_val   = checks.get("postgres", "")
-    critical_ok    = postgres_val in ("ok", "not_initialized")
-    all_initialized = all(v == "ok" for v in checks.values())
+    postgres_val = checks.get("postgres", "")
+    critical_ok = postgres_val in ("ok", "not_initialized")
 
     return JSONResponse(
         {

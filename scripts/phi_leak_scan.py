@@ -62,26 +62,28 @@ _VAULT_CIPHERTEXT_PREFIX = "vault:v1:"
 # means chasing every such spurious category as it's found; an
 # allowlist of what's actually PHI-relevant for this system is precise
 # by construction. PVH_MRN is the custom recognizer added below.
-_PHI_RELEVANT_ENTITY_TYPES = frozenset({
-    "PERSON",
-    "EMAIL_ADDRESS",
-    "PHONE_NUMBER",
-    "US_SSN",
-    "LOCATION",
-    "MEDICAL_LICENSE",
-    "US_DRIVER_LICENSE",
-    "US_BANK_NUMBER",
-    "PVH_MRN",
-    # DATE_TIME deliberately excluded from the default allowlist:
-    # verified directly that it flags ordinary ISO log timestamps
-    # (every line of a realistic timestamped log failed the scan on
-    # this alone) -- HIPAA does treat patient-specific dates (DOB,
-    # admission/discharge) as identifiers, but a generic NER model has
-    # no way to distinguish those from a routine log timestamp without
-    # much more context than a line-by-line scan gives it. Left as a
-    # known, documented scope boundary rather than a source of scanner
-    # fatigue that trains reviewers to ignore its output.
-})
+_PHI_RELEVANT_ENTITY_TYPES = frozenset(
+    {
+        "PERSON",
+        "EMAIL_ADDRESS",
+        "PHONE_NUMBER",
+        "US_SSN",
+        "LOCATION",
+        "MEDICAL_LICENSE",
+        "US_DRIVER_LICENSE",
+        "US_BANK_NUMBER",
+        "PVH_MRN",
+        # DATE_TIME deliberately excluded from the default allowlist:
+        # verified directly that it flags ordinary ISO log timestamps
+        # (every line of a realistic timestamped log failed the scan on
+        # this alone) -- HIPAA does treat patient-specific dates (DOB,
+        # admission/discharge) as identifiers, but a generic NER model has
+        # no way to distinguish those from a routine log timestamp without
+        # much more context than a line-by-line scan gives it. Left as a
+        # known, documented scope boundary rather than a source of scanner
+        # fatigue that trains reviewers to ignore its output.
+    }
+)
 
 
 def _build_analyzer(min_score: float):
@@ -136,15 +138,17 @@ def scan(path: Path, min_score: float) -> list[dict]:
                     continue
                 if result.score < min_score:
                     continue
-                matched = line[result.start:result.end]
-                findings.append({
-                    "file": str(file_path),
-                    "line": line_no,
-                    "entity_type": result.entity_type,
-                    "score": result.score,
-                    # Truncated on purpose -- see module docstring.
-                    "preview": (matched[:4] + "…") if len(matched) > 4 else matched,
-                })
+                matched = line[result.start : result.end]
+                findings.append(
+                    {
+                        "file": str(file_path),
+                        "line": line_no,
+                        "entity_type": result.entity_type,
+                        "score": result.score,
+                        # Truncated on purpose -- see module docstring.
+                        "preview": (matched[:4] + "…") if len(matched) > 4 else matched,
+                    }
+                )
 
     return findings
 
@@ -152,10 +156,14 @@ def scan(path: Path, min_score: float) -> list[dict]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("path", type=Path, help="File or directory to scan")
-    parser.add_argument("--min-score", type=float, default=0.5,
-                         help="Drop findings below this confidence "
-                              "(verified: sub-0.1 numeric-substring noise "
-                              "is common at the default threshold)")
+    parser.add_argument(
+        "--min-score",
+        type=float,
+        default=0.5,
+        help="Drop findings below this confidence "
+        "(verified: sub-0.1 numeric-substring noise "
+        "is common at the default threshold)",
+    )
     args = parser.parse_args()
 
     if not args.path.exists():
@@ -170,8 +178,11 @@ def main() -> int:
 
     print(f"FAIL: {len(findings)} potential PHI leak(s) found:\n", file=sys.stderr)
     for f in findings:
-        print(f"  {f['file']}:{f['line']}  {f['entity_type']} "
-              f"(score={f['score']:.2f})  {f['preview']!r}", file=sys.stderr)
+        print(
+            f"  {f['file']}:{f['line']}  {f['entity_type']} "
+            f"(score={f['score']:.2f})  {f['preview']!r}",
+            file=sys.stderr,
+        )
     return 1
 
 

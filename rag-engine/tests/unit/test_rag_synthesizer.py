@@ -5,9 +5,8 @@ run this file. Needs vector_store importable (SearchResult) — see
 tests/conftest.py's _ensure_cross_package_alias().
 """
 
-import os
-
 import pytest
+
 
 def _make_chunks():
     from vector_store.interface import SearchResult
@@ -26,6 +25,7 @@ def _make_chunks():
             document_type="prescription",
         ),
     ]
+
 
 class TestSynthesize:
     @pytest.mark.asyncio

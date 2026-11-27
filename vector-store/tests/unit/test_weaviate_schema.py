@@ -1,14 +1,14 @@
 import unittest
 from unittest.mock import MagicMock
 
-from weaviate.classes.config import Configure, VectorDistances
-
 from scripts.setup_weaviate_schema import (
     COLLECTION_NAME,
     TENANT_IDS,
     build_vector_index_config,
     ensure_tenants,
 )
+from weaviate.classes.config import Configure, VectorDistances
+
 
 class WeaviateSchemaTestCase(unittest.TestCase):
     def test_collection_name_is_shared(self) -> None:
@@ -40,6 +40,7 @@ class WeaviateSchemaTestCase(unittest.TestCase):
             vector_distances=VectorDistances,
         )
         self.assertEqual(type(config).__name__, "_VectorIndexConfigHNSWCreate")
+
 
 if __name__ == "__main__":
     unittest.main()

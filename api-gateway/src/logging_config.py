@@ -3,9 +3,10 @@ Structured JSON logging setup for PatientVectorHub.
 Produces Loki-compatible JSON lines on stdout.
 Call configure_logging() before creating the FastAPI app.
 """
+
+import json
 import logging
 import sys
-import json
 import time
 from typing import Any
 
@@ -14,19 +15,19 @@ class JsonFormatter(logging.Formatter):
     """Emit one JSON object per log record — Loki/Grafana-compatible."""
 
     LEVEL_MAP = {
-        logging.DEBUG:    "DEBUG",
-        logging.INFO:     "INFO",
-        logging.WARNING:  "WARN",
-        logging.ERROR:    "ERROR",
+        logging.DEBUG: "DEBUG",
+        logging.INFO: "INFO",
+        logging.WARNING: "WARN",
+        logging.ERROR: "ERROR",
         logging.CRITICAL: "CRITICAL",
     }
 
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {
-            "time":    time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(record.created)),
-            "level":   self.LEVEL_MAP.get(record.levelno, "INFO"),
-            "logger":  record.name,
-            "msg":     record.getMessage(),
+            "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(record.created)),
+            "level": self.LEVEL_MAP.get(record.levelno, "INFO"),
+            "logger": record.name,
+            "msg": record.getMessage(),
             "service": "pvh-api-gateway",
         }
 
@@ -37,10 +38,27 @@ class JsonFormatter(logging.Formatter):
         # Attach extra fields set via logger.info("...", extra={"key": "val"})
         for key, val in record.__dict__.items():
             if key not in (
-                "name", "msg", "args", "levelname", "levelno", "pathname",
-                "filename", "module", "exc_info", "exc_text", "stack_info",
-                "lineno", "funcName", "created", "msecs", "relativeCreated",
-                "thread", "threadName", "processName", "process", "message",
+                "name",
+                "msg",
+                "args",
+                "levelname",
+                "levelno",
+                "pathname",
+                "filename",
+                "module",
+                "exc_info",
+                "exc_text",
+                "stack_info",
+                "lineno",
+                "funcName",
+                "created",
+                "msecs",
+                "relativeCreated",
+                "thread",
+                "threadName",
+                "processName",
+                "process",
+                "message",
             ):
                 payload[key] = val
 

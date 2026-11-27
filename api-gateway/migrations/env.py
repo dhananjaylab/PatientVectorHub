@@ -1,17 +1,17 @@
 """Alembic environment — async SQLAlchemy support."""
+
 import asyncio
 import os
 import ssl
 import sys
-from pathlib import Path
 from logging.config import fileConfig
+from pathlib import Path
 
 from alembic import context
+from dotenv import load_dotenv
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
-from dotenv import load_dotenv
-
 from src.config import normalize_asyncpg_url
 
 config = context.config
@@ -70,10 +70,10 @@ def do_run_migrations(connection: Connection) -> None:
 async def run_async_migrations() -> None:
     """Run migrations asynchronously with SSL support for Aiven."""
     db_url = config.get_main_option("sqlalchemy.url")
-    
+
     # Determine if we need SSL
     needs_ssl = "aivencloud.com" in db_url
-    
+
     # Build connect_args with SSL context
     connect_args = {}
     if needs_ssl:
@@ -82,7 +82,7 @@ async def run_async_migrations() -> None:
         ssl_context.verify_mode = ssl.CERT_NONE
         # Pass SSL as a parameter that asyncpg will use directly
         connect_args["ssl"] = ssl_context
-    
+
     # Create async engine
     engine = create_async_engine(
         db_url,
@@ -90,11 +90,11 @@ async def run_async_migrations() -> None:
         echo=False,
         connect_args=connect_args,
     )
-    
+
     # Connect and run migrations
     async with engine.connect() as connection:
         await connection.run_sync(do_run_migrations)
-    
+
     await engine.dispose()
 
 

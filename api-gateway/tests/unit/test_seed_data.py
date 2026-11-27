@@ -1,13 +1,16 @@
-import sys
 import os
+import sys
 from unittest.mock import Mock, patch
 
 import pytest
 
 # Import seed_data from infra/scripts directory
-infra_scripts_path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "infra", "scripts"))
+infra_scripts_path = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), "..", "..", "..", "infra", "scripts")
+)
 sys.path.insert(0, infra_scripts_path)
-import seed_data
+import seed_data  # noqa: E402
+
 
 def test_seed_data_reset_clears_known_tenant_rows() -> None:
     conn = Mock()
@@ -72,9 +75,11 @@ class TestResolveMrn:
         """Mirrors vault_client.py's require_vault_or_fail_closed() —
         an environment that's supposed to handle real PHI must never
         silently fall back to an unencrypted-shaped placeholder."""
-        with patch.object(seed_data, "ALLOW_REAL_PHI", True):
-            with pytest.raises(RuntimeError, match="ALLOW_REAL_PHI"):
-                seed_data.resolve_mrn("seed-1", vault_ready=False)
+        with (
+            patch.object(seed_data, "ALLOW_REAL_PHI", True),
+            pytest.raises(RuntimeError, match="ALLOW_REAL_PHI"),
+        ):
+            seed_data.resolve_mrn("seed-1", vault_ready=False)
 
     def test_real_mrn_base64_encodes_synthetic_plaintext_and_returns_vault_ciphertext(self):
         mock_client = Mock()
@@ -104,8 +109,9 @@ class TestResolveMrn:
     def test_vault_ready_false_when_health_check_raises(self):
         mock_client = Mock()
         mock_client.sys.read_health_status.side_effect = Exception("connection refused")
-        with patch.object(seed_data, "hvac", Mock()), patch.object(
-            seed_data, "_get_vault_client", return_value=mock_client
+        with (
+            patch.object(seed_data, "hvac", Mock()),
+            patch.object(seed_data, "_get_vault_client", return_value=mock_client),
         ):
             assert seed_data._vault_ready() is False
 
@@ -113,8 +119,9 @@ class TestResolveMrn:
         mock_client = Mock()
         mock_client.sys.read_health_status.return_value = None
         mock_client.secrets.transit.read_key.side_effect = Exception("404")
-        with patch.object(seed_data, "hvac", Mock()), patch.object(
-            seed_data, "_get_vault_client", return_value=mock_client
+        with (
+            patch.object(seed_data, "hvac", Mock()),
+            patch.object(seed_data, "_get_vault_client", return_value=mock_client),
         ):
             assert seed_data._vault_ready() is False
 
@@ -122,7 +129,8 @@ class TestResolveMrn:
         mock_client = Mock()
         mock_client.sys.read_health_status.return_value = None
         mock_client.secrets.transit.read_key.return_value = {"data": {"name": "phi-key"}}
-        with patch.object(seed_data, "hvac", Mock()), patch.object(
-            seed_data, "_get_vault_client", return_value=mock_client
+        with (
+            patch.object(seed_data, "hvac", Mock()),
+            patch.object(seed_data, "_get_vault_client", return_value=mock_client),
         ):
             assert seed_data._vault_ready() is True

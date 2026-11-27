@@ -1,4 +1,5 @@
 """Test database connection to verify connectivity before running migrations."""
+
 import asyncio
 import os
 import ssl
@@ -8,7 +9,6 @@ from urllib.parse import parse_qs, urlparse
 
 import asyncpg
 from dotenv import load_dotenv
-
 from src.config import normalize_asyncpg_url
 
 

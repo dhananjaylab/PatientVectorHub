@@ -28,6 +28,7 @@ Phase 8 changes:
     each job dict exactly as it always has — no new serialization needed
     here.
 """
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -160,5 +161,3 @@ async def list_jobs(
 ) -> dict:
     result = await crud.list_ingestion_jobs(db, status=status, limit=limit, offset=offset)
     return {"jobs": result["jobs"], "total": result["total"], "limit": limit, "offset": offset}
-
-

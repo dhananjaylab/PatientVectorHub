@@ -15,9 +15,7 @@ project's existing OpenAI-embedding end-to-end test).
 """
 
 import os
-import sys
 import uuid
-from pathlib import Path
 
 import pytest
 
@@ -26,11 +24,13 @@ pytestmark = pytest.mark.integration
 TENANT_ID = "00000000-0000-0000-0000-000000000001"  # seeded by scripts/seed_data.py
 FAKE_VECTOR_DIM = int(os.getenv("EMBEDDING_DIMENSIONS", "1536"))
 
+
 def _fake_vector(seed: int) -> list[float]:
     """A deterministic, non-embedding vector — good enough to prove
     upsert/search round-trips correctly; not meant to have any semantic
     meaning."""
     return [((seed + i) % 97) / 97.0 for i in range(FAKE_VECTOR_DIM)]
+
 
 @pytest.fixture
 def chunk():
@@ -41,6 +41,7 @@ def chunk():
         index=0,
         metadata={"document_type": "lab_result", "patient_id_hash": "hash-e2e"},
     )
+
 
 class TestWeaviateStoreLive:
     @pytest.mark.asyncio
@@ -120,6 +121,7 @@ class TestQdrantStoreLive:
         store = QdrantStore(TENANT_ID)
         assert await store.health_check() is True
         await store.close()
+
 
 class TestDualWriteLive:
     @pytest.mark.asyncio

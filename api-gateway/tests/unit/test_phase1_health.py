@@ -3,9 +3,7 @@ Phase 1 unit tests — FastAPI health endpoints and app wiring.
 These must all pass before any feature code is written.
 Run with: pytest tests/unit/test_phase1_health.py -v
 """
-import sys
-import os
-import pytest
+
 
 # ── App import ────────────────────────────────────────────────────────────────
 class TestAppCreation:
@@ -31,6 +29,7 @@ class TestAppCreation:
     def test_app_has_docs_enabled(self, test_app):
         assert test_app.docs_url == "/docs"
         assert test_app.redoc_url == "/redoc"
+
 
 # ── /health endpoint ──────────────────────────────────────────────────────────
 class TestHealthEndpoint:
@@ -58,6 +57,7 @@ class TestHealthEndpoint:
         resp = client.get("/health", headers={})
         assert resp.status_code == 200
 
+
 # ── /ready endpoint ───────────────────────────────────────────────────────────
 class TestReadyEndpoint:
     def test_ready_returns_json(self, client):
@@ -82,35 +82,44 @@ class TestReadyEndpoint:
         resp = client.get("/ready", headers={})
         assert resp.status_code in (200, 503)
 
+
 # ── Config ─────────────────────────────────────────────────────────────────────
 class TestConfig:
     def test_settings_loads(self):
         from src.config import settings
+
         assert settings is not None
 
     def test_settings_has_database_url(self):
         from src.config import settings
+
         assert settings.DATABASE_URL.startswith("postgresql")
 
     def test_settings_has_redis_url(self):
         from src.config import settings
+
         assert settings.REDIS_URL.startswith("redis://")
 
     def test_settings_cors_origins_list(self):
         from src.config import settings
+
         origins = settings.cors_origins_list
         assert isinstance(origins, list)
         assert len(origins) >= 1
 
     def test_settings_environment_defaults_to_development(self):
         from src.config import settings
+
         # In CI environment is "test", locally "development"
         assert settings.ENVIRONMENT in ("development", "test", "production", "staging")
 
     def test_settings_log_level_valid(self):
         import logging
+
         from src.config import settings
+
         assert hasattr(logging, settings.LOG_LEVEL.upper())
+
 
 # ── CORS middleware ────────────────────────────────────────────────────────────
 class TestCORS:

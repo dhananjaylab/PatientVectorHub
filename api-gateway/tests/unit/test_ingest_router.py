@@ -81,7 +81,7 @@ def _mock_job_row(**overrides) -> dict:
         "error_message": None,
         "started_at": None,
         "completed_at": None,
-        "created_at": datetime.datetime(2026, 8, 15, tzinfo=datetime.timezone.utc),
+        "created_at": datetime.datetime(2026, 8, 15, tzinfo=datetime.UTC),
     }
     row.update(overrides)
     row.setdefault("progress_pct", 0.0)
@@ -103,13 +103,9 @@ class TestCreateJob:
                 "src.routers.ingest.crud.create_document",
                 new=AsyncMock(side_effect=[{"id": uuid.uuid4()}, {"id": uuid.uuid4()}]),
             ),
-            patch(
-                "src.routers.ingest.publish_document_ingest", new=AsyncMock()
-            ) as mocked_publish,
+            patch("src.routers.ingest.publish_document_ingest", new=AsyncMock()) as mocked_publish,
             patch("src.routers.ingest.crud.write_audit_log", new=AsyncMock()) as mocked_audit,
-            patch(
-                "src.routers.ingest.crud.get_ingestion_job", new=AsyncMock(return_value=job_row)
-            ),
+            patch("src.routers.ingest.crud.get_ingestion_job", new=AsyncMock(return_value=job_row)),
         ):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
                 resp = await c.post("/v1/ingest/jobs", json=_VALID_JOB_BODY)
@@ -137,9 +133,7 @@ class TestCreateJob:
             ),
             patch("src.routers.ingest.publish_document_ingest", new=AsyncMock()),
             patch("src.routers.ingest.crud.write_audit_log", new=AsyncMock()),
-            patch(
-                "src.routers.ingest.crud.get_ingestion_job", new=AsyncMock(return_value=job_row)
-            ),
+            patch("src.routers.ingest.crud.get_ingestion_job", new=AsyncMock(return_value=job_row)),
         ):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
                 resp = await c.post("/v1/ingest/jobs", json=_VALID_JOB_BODY)

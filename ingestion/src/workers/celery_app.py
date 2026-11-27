@@ -20,6 +20,7 @@ retrieval doesn't exist until the RAG engine lands in Phase 7. Add it to
 beat_schedule at that point; scheduling it against a task that isn't
 registered yet just logs "Received unregistered task" every tick.
 """
+
 from celery import Celery
 from celery.schedules import crontab
 from celery.signals import worker_init, worker_process_shutdown
@@ -30,15 +31,15 @@ celery_app = Celery("pvh-ingestion", broker=settings.REDIS_URL, backend=settings
 celery_app.conf.update(
     task_serializer="json",
     accept_content=["json"],
-    task_acks_late=True,            # ack only after the task actually completes
-    worker_prefetch_multiplier=1,   # one task at a time per worker process
+    task_acks_late=True,  # ack only after the task actually completes
+    worker_prefetch_multiplier=1,  # one task at a time per worker process
     task_track_started=True,
 )
 
 celery_app.conf.beat_schedule = {
     "cleanup-old-ingestion-jobs": {
         "task": "pvh.cleanup_completed_jobs",
-        "schedule": crontab(hour="2", minute="0"),   # 2am daily
+        "schedule": crontab(hour="2", minute="0"),  # 2am daily
     },
     "requeue-stale-processing-documents": {
         "task": "pvh.requeue_stale_documents",

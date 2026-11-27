@@ -42,10 +42,9 @@ async def retrieve(
         return results
     finally:
         import inspect
+
         close_method = getattr(store, "close", None)
         if callable(close_method):
             res = close_method()
             if inspect.isawaitable(res):
                 await res
-
-

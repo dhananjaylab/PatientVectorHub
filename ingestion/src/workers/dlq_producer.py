@@ -9,6 +9,7 @@ Two entry points:
   - publish_to_dlq_sync() sync wrapper, for use from batch_worker.py's
                            Celery task (plain thread, no running loop)
 """
+
 import asyncio
 import json
 import logging

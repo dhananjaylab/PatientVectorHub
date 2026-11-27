@@ -11,9 +11,10 @@ it does not create a tenant for an initial read.
 
 Safe to run multiple times — skips creation if the collection already exists.
 """
+
 import os
-from pathlib import Path
 import time
+from pathlib import Path
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
@@ -110,13 +111,17 @@ def create_schema() -> None:
             try:
                 if use_cloud:
                     from weaviate.classes.init import Auth
+
                     client = weaviate.connect_to_weaviate_cloud(
                         cluster_url=client_kwargs["cluster_url"],
-                        auth_credentials=Auth.api_key(client_kwargs["api_key"]) if client_kwargs.get("api_key") else None,
+                        auth_credentials=Auth.api_key(client_kwargs["api_key"])
+                        if client_kwargs.get("api_key")
+                        else None,
                     )
                 else:
                     client = weaviate.connect_to_local(
-                        host=client_kwargs["host"], port=client_kwargs["port"],
+                        host=client_kwargs["host"],
+                        port=client_kwargs["port"],
                     )
                 if client.is_ready():
                     break
@@ -154,16 +159,32 @@ def create_schema() -> None:
                     vector_index_config=index_config,
                 ),
                 properties=[
-                    Property(name="chunk_text",      data_type=DataType.TEXT),
-                    Property(name="document_id",     data_type=DataType.TEXT,
-                             index_filterable=True,  index_searchable=False),
-                    Property(name="patient_id_hash", data_type=DataType.TEXT,
-                             index_filterable=True,  index_searchable=False),
-                    Property(name="document_type",   data_type=DataType.TEXT,
-                             index_filterable=True,  index_searchable=False),
-                    Property(name="model_version",  data_type=DataType.TEXT,
-                             index_filterable=True,  index_searchable=False),
-                    Property(name="chunk_index",     data_type=DataType.INT),
+                    Property(name="chunk_text", data_type=DataType.TEXT),
+                    Property(
+                        name="document_id",
+                        data_type=DataType.TEXT,
+                        index_filterable=True,
+                        index_searchable=False,
+                    ),
+                    Property(
+                        name="patient_id_hash",
+                        data_type=DataType.TEXT,
+                        index_filterable=True,
+                        index_searchable=False,
+                    ),
+                    Property(
+                        name="document_type",
+                        data_type=DataType.TEXT,
+                        index_filterable=True,
+                        index_searchable=False,
+                    ),
+                    Property(
+                        name="model_version",
+                        data_type=DataType.TEXT,
+                        index_filterable=True,
+                        index_searchable=False,
+                    ),
+                    Property(name="chunk_index", data_type=DataType.INT),
                 ],
             )
             print(f"  OK Created : {COLLECTION_NAME}")

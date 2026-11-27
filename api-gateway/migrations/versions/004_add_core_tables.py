@@ -46,8 +46,9 @@ bugs rather than just restyling:
    See docs/adr/ADR-010-api-key-auth-rls-bootstrap.md for the full grant
    sequence and the test that verified this.
 """
-from alembic import op
+
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "004"
@@ -74,7 +75,9 @@ def upgrade() -> None:
         sa.Column("status", sa.String(length=32), nullable=False, server_default="queued"),
         sa.Column("source_type", sa.String(length=32), nullable=False),
         sa.Column(
-            "source_config", postgresql.JSONB(astext_type=sa.Text()), nullable=False,
+            "source_config",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=False,
             server_default="{}",
         ),
         sa.Column("doc_count_total", sa.BigInteger(), nullable=False, server_default="0"),
@@ -82,23 +85,29 @@ def upgrade() -> None:
         sa.Column("doc_count_failed", sa.BigInteger(), nullable=False, server_default="0"),
         sa.Column("created_by", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id")),
         sa.Column(
-            "tenant_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("tenants.id"),
+            "tenant_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("tenants.id"),
             nullable=False,
         ),
         sa.Column("started_at", sa.TIMESTAMP(timezone=True)),
         sa.Column("completed_at", sa.TIMESTAMP(timezone=True)),
         sa.Column("error_message", sa.Text()),
         sa.Column(
-            "created_at", sa.TIMESTAMP(timezone=True), nullable=False,
+            "created_at",
+            sa.TIMESTAMP(timezone=True),
+            nullable=False,
             server_default=sa.text("NOW()"),
         ),
     )
     op.create_check_constraint(
-        "ck_ingestion_jobs_status", "ingestion_jobs",
+        "ck_ingestion_jobs_status",
+        "ingestion_jobs",
         "status IN ('queued','running','completed','failed','cancelled')",
     )
     op.create_check_constraint(
-        "ck_ingestion_jobs_source_type", "ingestion_jobs",
+        "ck_ingestion_jobs_source_type",
+        "ingestion_jobs",
         "source_type IN ('s3_batch','kafka_stream','api_push')",
     )
     op.create_index("ix_ingestion_jobs_tenant_id", "ingestion_jobs", ["tenant_id"])
@@ -114,36 +123,49 @@ def upgrade() -> None:
             primary_key=True,
         ),
         sa.Column(
-            "patient_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("patients.id"),
+            "patient_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("patients.id"),
             nullable=False,
         ),
         sa.Column("document_type", sa.String(length=32), nullable=False),
         sa.Column("source_path", sa.Text(), nullable=False),
         sa.Column(
-            "ingestion_job_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("ingestion_jobs.id"),
+            "ingestion_job_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("ingestion_jobs.id"),
         ),
         sa.Column(
-            "embedding_status", sa.String(length=32), nullable=False, server_default="pending",
+            "embedding_status",
+            sa.String(length=32),
+            nullable=False,
+            server_default="pending",
         ),
         sa.Column("chunk_count", sa.Integer()),
         sa.Column("model_version", sa.String(length=128)),
         sa.Column("vector_store", sa.String(length=32), nullable=False, server_default="weaviate"),
         sa.Column(
-            "tenant_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("tenants.id"),
+            "tenant_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("tenants.id"),
             nullable=False,
         ),
         sa.Column(
-            "ingested_at", sa.TIMESTAMP(timezone=True), nullable=False,
+            "ingested_at",
+            sa.TIMESTAMP(timezone=True),
+            nullable=False,
             server_default=sa.text("NOW()"),
         ),
     )
     op.create_check_constraint(
-        "ck_documents_document_type", "documents",
+        "ck_documents_document_type",
+        "documents",
         "document_type IN ('clinical_note','lab_result','imaging_report',"
         "'discharge_summary','prescription')",
     )
     op.create_check_constraint(
-        "ck_documents_embedding_status", "documents",
+        "ck_documents_embedding_status",
+        "documents",
         "embedding_status IN ('pending','processing','completed','failed')",
     )
     op.create_index("ix_documents_patient_id", "documents", ["patient_id"])
@@ -166,20 +188,30 @@ def upgrade() -> None:
         sa.Column("key_hash", sa.String(length=64), nullable=False, unique=True),
         sa.Column("name", sa.String(length=100), nullable=False),
         sa.Column(
-            "scopes", postgresql.ARRAY(sa.String()), nullable=False, server_default="{}",
+            "scopes",
+            postgresql.ARRAY(sa.String()),
+            nullable=False,
+            server_default="{}",
         ),
         sa.Column(
-            "user_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id"), nullable=False,
+            "user_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("users.id"),
+            nullable=False,
         ),
         sa.Column(
-            "tenant_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("tenants.id"),
+            "tenant_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("tenants.id"),
             nullable=False,
         ),
         sa.Column("expires_at", sa.TIMESTAMP(timezone=True), nullable=False),
         sa.Column("is_revoked", sa.Boolean(), nullable=False, server_default="false"),
         sa.Column("last_used_at", sa.TIMESTAMP(timezone=True)),
         sa.Column(
-            "created_at", sa.TIMESTAMP(timezone=True), nullable=False,
+            "created_at",
+            sa.TIMESTAMP(timezone=True),
+            nullable=False,
             server_default=sa.text("NOW()"),
         ),
     )
@@ -195,7 +227,9 @@ def upgrade() -> None:
             primary_key=True,
         ),
         sa.Column(
-            "tenant_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("tenants.id"),
+            "tenant_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("tenants.id"),
             nullable=False,
         ),
         sa.Column("user_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("users.id")),
@@ -204,7 +238,9 @@ def upgrade() -> None:
         sa.Column("latency_ms", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("model_version", sa.String(length=128)),
         sa.Column(
-            "created_at", sa.TIMESTAMP(timezone=True), nullable=False,
+            "created_at",
+            sa.TIMESTAMP(timezone=True),
+            nullable=False,
             server_default=sa.text("NOW()"),
         ),
     )
@@ -228,20 +264,27 @@ def upgrade() -> None:
         sa.Column("request_id", sa.String(length=64)),
         sa.Column("status_code", sa.Integer()),
         sa.Column(
-            "metadata", postgresql.JSONB(astext_type=sa.Text()), nullable=False,
+            "metadata",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=False,
             server_default="{}",
         ),
         sa.Column(
-            "tenant_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("tenants.id"),
+            "tenant_id",
+            postgresql.UUID(as_uuid=True),
+            sa.ForeignKey("tenants.id"),
             nullable=False,
         ),
         sa.Column(
-            "created_at", sa.TIMESTAMP(timezone=True), nullable=False,
+            "created_at",
+            sa.TIMESTAMP(timezone=True),
+            nullable=False,
             server_default=sa.text("NOW()"),
         ),
     )
     op.create_check_constraint(
-        "ck_audit_logs_action", "audit_logs",
+        "ck_audit_logs_action",
+        "audit_logs",
         "action IN ('document_query','document_ingest','phi_reveal','api_key_create',"
         "'api_key_revoke','user_login','settings_change','data_export')",
     )

@@ -39,21 +39,32 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("stats_csv", help="Locust's *_stats.csv output path")
     parser.add_argument("--run-time-seconds", type=float, required=True)
-    parser.add_argument("--min-dispatch-rate", type=float, required=True,
-                         help="Minimum required requests/sec for " + _TARGET_ROUTE_NAME)
-    parser.add_argument("--max-failure-pct", type=float, default=5.0,
-                         help="Ties to infra/prometheus/alert_rules.yml's "
-                              "5xx-rate-critical threshold (ADR-018) rather "
-                              "than an independently invented number")
+    parser.add_argument(
+        "--min-dispatch-rate",
+        type=float,
+        required=True,
+        help="Minimum required requests/sec for " + _TARGET_ROUTE_NAME,
+    )
+    parser.add_argument(
+        "--max-failure-pct",
+        type=float,
+        default=5.0,
+        help="Ties to infra/prometheus/alert_rules.yml's "
+        "5xx-rate-critical threshold (ADR-018) rather "
+        "than an independently invented number",
+    )
     args = parser.parse_args()
 
     with open(args.stats_csv, newline="") as f:
         rows = {row["Name"]: row for row in csv.DictReader(f)}
 
     if _TARGET_ROUTE_NAME not in rows:
-        print(f"FAIL: no stats row found for {_TARGET_ROUTE_NAME!r} -- "
-              "did the target route change, or did the run fail before "
-              "any requests completed?", file=sys.stderr)
+        print(
+            f"FAIL: no stats row found for {_TARGET_ROUTE_NAME!r} -- "
+            "did the target route change, or did the run fail before "
+            "any requests completed?",
+            file=sys.stderr,
+        )
         return 1
 
     row = rows[_TARGET_ROUTE_NAME]
@@ -62,18 +73,25 @@ def main() -> int:
     dispatch_rate = request_count / args.run_time_seconds
     failure_pct = (failure_count / request_count * 100) if request_count else 100.0
 
-    print(f"{_TARGET_ROUTE_NAME}: {request_count} requests over "
-          f"{args.run_time_seconds:.0f}s = {dispatch_rate:.2f} req/s "
-          f"({failure_count} failures, {failure_pct:.2f}%)")
+    print(
+        f"{_TARGET_ROUTE_NAME}: {request_count} requests over "
+        f"{args.run_time_seconds:.0f}s = {dispatch_rate:.2f} req/s "
+        f"({failure_count} failures, {failure_pct:.2f}%)"
+    )
 
     ok = True
     if dispatch_rate < args.min_dispatch_rate:
-        print(f"FAIL: dispatch rate {dispatch_rate:.2f} req/s < required "
-              f"{args.min_dispatch_rate:.2f} req/s", file=sys.stderr)
+        print(
+            f"FAIL: dispatch rate {dispatch_rate:.2f} req/s < required "
+            f"{args.min_dispatch_rate:.2f} req/s",
+            file=sys.stderr,
+        )
         ok = False
     if failure_pct > args.max_failure_pct:
-        print(f"FAIL: failure rate {failure_pct:.2f}% > allowed "
-              f"{args.max_failure_pct:.2f}%", file=sys.stderr)
+        print(
+            f"FAIL: failure rate {failure_pct:.2f}% > allowed {args.max_failure_pct:.2f}%",
+            file=sys.stderr,
+        )
         ok = False
 
     if ok:

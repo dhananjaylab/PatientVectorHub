@@ -3,6 +3,7 @@
 Phase 8 addition: NamespaceHealthResponse, for the new
 GET /vector-store/namespaces endpoint (ADR-015).
 """
+
 from __future__ import annotations
 
 from pydantic import BaseModel, Field

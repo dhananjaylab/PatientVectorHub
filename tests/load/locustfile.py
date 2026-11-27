@@ -121,9 +121,7 @@ class IngestDispatchUser(HttpUser):
             "source_type": "api_push",
             "documents": [_fake_document_ref() for _ in range(10)],
         }
-        with self.client.post(
-            "/v1/ingest/jobs", json=payload, catch_response=True
-        ) as response:
+        with self.client.post("/v1/ingest/jobs", json=payload, catch_response=True) as response:
             if response.status_code == 429:
                 # Expected once sustained load crosses the 100/minute
                 # limit -- a rate-limit rejection is correct behavior,
@@ -164,9 +162,7 @@ class QueryUser(HttpUser):
             "top_k": 10,
             "llm_provider": "mock",
         }
-        with self.client.post(
-            "/v1/query", json=payload, catch_response=True
-        ) as response:
+        with self.client.post("/v1/query", json=payload, catch_response=True) as response:
             if response.status_code == 429:
                 response.success()  # same reasoning as IngestDispatchUser
             elif response.status_code != 200:

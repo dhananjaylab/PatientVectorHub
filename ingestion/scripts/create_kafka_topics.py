@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Create all required Kafka topics. Safe to run multiple times."""
+
 import os
-from pathlib import Path
 import sys
 import time
+from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -67,7 +68,6 @@ def kafka_admin_config() -> dict:
         config["ssl_keyfile"] = KAFKA_SSL_KEYFILE
 
     return config
-
 
 
 def topic_config(topic: dict) -> dict:

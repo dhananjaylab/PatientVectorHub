@@ -8,6 +8,7 @@ list. Anonymous requests default to "readonly" via getattr's fallback, so
 an unauthenticated caller is treated as the lowest-privilege role rather
 than raising an AttributeError.
 """
+
 from __future__ import annotations
 
 from fastapi import Depends, HTTPException
@@ -27,9 +28,7 @@ def require_role(*allowed_roles: str):
     def check(request: Request) -> str:
         role = getattr(request.state, "role", "readonly")
         if role not in allowed_roles:
-            raise HTTPException(
-                status_code=403, detail=f"Role {role!r} not in {allowed_roles}"
-            )
+            raise HTTPException(status_code=403, detail=f"Role {role!r} not in {allowed_roles}")
         return role
 
     return Depends(check)

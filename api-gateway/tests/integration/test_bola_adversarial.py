@@ -32,6 +32,7 @@ file is meant to run alongside it, under the same
 RLS_TEST_DATABASE_URL). Run for real before relying on it:
     pytest tests/integration/test_bola_adversarial.py -v -m integration
 """
+
 import os
 import uuid
 from pathlib import Path
@@ -39,7 +40,6 @@ from pathlib import Path
 import pytest
 from dotenv import load_dotenv
 from httpx import ASGITransport, AsyncClient
-
 from src.config import normalize_asyncpg_url
 
 load_dotenv(Path(__file__).resolve().parents[3] / ".env")
@@ -66,14 +66,18 @@ async def _seed_tenant_with_job(conn, tenant_id: str, tenant_name: str) -> str:
     await conn.execute(
         "INSERT INTO tenants (id, name, namespace, plan, created_at) "
         "VALUES ($1, $2, $3, 'enterprise', NOW()) ON CONFLICT (id) DO NOTHING",
-        tenant_id, tenant_name, f"ns_{tenant_id[:8]}",
+        tenant_id,
+        tenant_name,
+        f"ns_{tenant_id[:8]}",
     )
     job_id = str(uuid.uuid4())
     await conn.execute(
         "INSERT INTO ingestion_jobs "
         "(id, name, status, source_type, tenant_id, created_at) "
         "VALUES ($1, $2, 'completed', 'api_push', $3, NOW())",
-        job_id, f"bola-test-job-{tenant_id[:8]}", tenant_id,
+        job_id,
+        f"bola-test-job-{tenant_id[:8]}",
+        tenant_id,
     )
     return job_id
 
@@ -84,10 +88,9 @@ def _build_app_with_real_db(role: str, tenant_id: str):
     what sets app.tenant_id via SET LOCAL for RLS to act on. Mocking
     it here would test nothing."""
     from fastapi import FastAPI
-    from starlette.middleware.base import BaseHTTPMiddleware
-
     from src.errors import PVHError, pvh_exception_handler
     from src.routers.ingest import router
+    from starlette.middleware.base import BaseHTTPMiddleware
 
     app = FastAPI()
     app.add_exception_handler(PVHError, pvh_exception_handler)  # type: ignore
@@ -130,9 +133,7 @@ class TestBOLACrossTenantJobAccess:
             tenant_b_job_id = await _seed_tenant_with_job(conn, TENANT_B, "BOLA Test Tenant B")
 
             app = _build_app_with_real_db(role="engineer", tenant_id=TENANT_A)
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://t"
-            ) as c:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
                 resp = await c.get(f"/v1/ingest/jobs/{tenant_b_job_id}")
 
             # The correct, secure answer is 404 -- indistinguishable
@@ -145,8 +146,9 @@ class TestBOLACrossTenantJobAccess:
                 f"got {resp.status_code}, expected 404. Response: {resp.text}"
             )
         finally:
-            await conn.execute("DELETE FROM ingestion_jobs WHERE tenant_id IN ($1, $2)",
-                                TENANT_A, TENANT_B)
+            await conn.execute(
+                "DELETE FROM ingestion_jobs WHERE tenant_id IN ($1, $2)", TENANT_A, TENANT_B
+            )
             await conn.execute("DELETE FROM tenants WHERE id IN ($1, $2)", TENANT_A, TENANT_B)
             await conn.close()
 
@@ -171,9 +173,7 @@ class TestBOLACrossTenantJobAccess:
             tenant_a_job_id = await _seed_tenant_with_job(conn, TENANT_A, "BOLA Test Tenant A")
 
             app = _build_app_with_real_db(role="engineer", tenant_id=TENANT_A)
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://t"
-            ) as c:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
                 resp = await c.get(f"/v1/ingest/jobs/{tenant_a_job_id}")
 
             assert resp.status_code == 200

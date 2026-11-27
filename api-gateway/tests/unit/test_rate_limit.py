@@ -41,8 +41,6 @@ same module if it's ever decorated with @limiter.limit(...).
 
 from unittest.mock import MagicMock
 
-import pytest
-
 
 def _fake_request(*, api_key_id=None, tenant_id=None, user_id=None, remote_ip="203.0.113.5"):
     """Mirrors test_rbac.py's _fake_request() pattern: MagicMock(spec=[...])
@@ -109,7 +107,6 @@ class TestRateLimitEnforcement:
         from fastapi import FastAPI, Request, Response
         from fastapi.testclient import TestClient
         from slowapi.errors import RateLimitExceeded
-
         from src.middleware.rate_limit import limiter, rate_limit_exceeded_handler
 
         app = FastAPI()
@@ -143,7 +140,6 @@ class TestRateLimitEnforcement:
         from fastapi import FastAPI, Request, Response
         from fastapi.testclient import TestClient
         from slowapi.errors import RateLimitExceeded
-
         from src.middleware.rate_limit import limiter, rate_limit_exceeded_handler
 
         app = FastAPI()
@@ -168,7 +164,6 @@ class TestRateLimitEnforcement:
         from fastapi import FastAPI, Request, Response
         from fastapi.testclient import TestClient
         from slowapi.errors import RateLimitExceeded
-
         from src.middleware.rate_limit import limiter, rate_limit_exceeded_handler
 
         app = FastAPI()

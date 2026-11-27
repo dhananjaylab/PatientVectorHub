@@ -11,6 +11,7 @@ discovery onto whichever single worker happened to consume it. See
 ingestion/src/workers/stream_consumer.py's docstring for the consumer
 side of this.
 """
+
 import json
 import uuid
 
@@ -42,7 +43,7 @@ async def publish_document_ingest(
     }
     await producer.send_and_wait(
         topic="doc-ingest",
-        key=tenant_id.encode(),          # partition key = tenant -> ordered per tenant
+        key=tenant_id.encode(),  # partition key = tenant -> ordered per tenant
         value=json.dumps(payload).encode(),
         headers=[(b"correlation-id", payload["correlation_id"].encode())],
     )

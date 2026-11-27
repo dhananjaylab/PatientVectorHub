@@ -29,6 +29,7 @@ lands). Until that helper exists, any connection that does not set
 app.tenant_id will see zero rows from every tenant-scoped table —
 fail-closed by design, not fail-open.
 """
+
 from alembic import op
 
 # revision identifiers

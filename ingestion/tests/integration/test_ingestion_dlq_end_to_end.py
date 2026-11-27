@@ -9,6 +9,7 @@ Uses Celery's Task.apply(..., retries=N) to simulate "final attempt"
 directly rather than looping through real retry mechanics — see
 tests/unit/test_ingestion_dlq.py's module docstring for why.
 """
+
 import asyncio
 import json
 import uuid
@@ -25,6 +26,7 @@ pytestmark = pytest.mark.integration
 
 TENANT_A = "00000000-0000-0000-0000-000000000001"
 
+
 async def _consume_one_dlq_message(doc_id: str, timeout: float = 15.0) -> dict | None:
     from aiokafka import AIOKafkaConsumer
     from src.workers.kafka_config import kafka_client_kwargs
@@ -32,7 +34,7 @@ async def _consume_one_dlq_message(doc_id: str, timeout: float = 15.0) -> dict |
     consumer = AIOKafkaConsumer(
         "doc-dlq",
         **kafka_client_kwargs(),
-        group_id=f"dlq-test-{uuid.uuid4()}",   # fresh group -> reads from the start
+        group_id=f"dlq-test-{uuid.uuid4()}",  # fresh group -> reads from the start
         auto_offset_reset="earliest",
         enable_auto_commit=True,
     )
@@ -47,10 +49,11 @@ async def _consume_one_dlq_message(doc_id: str, timeout: float = 15.0) -> dict |
             message = json.loads(result.value)
             if message.get("doc_id") == doc_id:
                 return message
-    except asyncio.TimeoutError:
+    except TimeoutError:
         return None
     finally:
         await consumer.stop()
+
 
 @pytest.mark.asyncio
 async def test_forced_failure_lands_on_dlq_and_marks_document_failed():
@@ -65,18 +68,25 @@ async def test_forced_failure_lands_on_dlq_and_marks_document_failed():
     patient_id = str(uuid.uuid4())
 
     with get_tenant_sync_session(TENANT_A) as db:
-        db.execute(sqltext(
-            "INSERT INTO ingestion_jobs (id, name, status, source_type, doc_count_total, tenant_id)"
-            " VALUES (:id, 'dlq-test', 'queued', 's3_batch', 1, :tid)"
-        ), {"id": job_id, "tid": TENANT_A})
-        db.execute(sqltext(
-            "INSERT INTO patients (id, mrn, tenant_id) VALUES (:id, 'vault:v1:DLQ', :tid)"
-        ), {"id": patient_id, "tid": TENANT_A})
-        db.execute(sqltext(
-            "INSERT INTO documents (id, patient_id, document_type, source_path,"
-            " ingestion_job_id, embedding_status, tenant_id)"
-            " VALUES (:id, :pid, 'clinical_note', 'r2://test/corrupt.pdf', :jid, 'pending', :tid)"
-        ), {"id": doc_id, "pid": patient_id, "jid": job_id, "tid": TENANT_A})
+        db.execute(
+            sqltext(
+                "INSERT INTO ingestion_jobs (id, name, status, source_type, doc_count_total, tenant_id)"
+                " VALUES (:id, 'dlq-test', 'queued', 's3_batch', 1, :tid)"
+            ),
+            {"id": job_id, "tid": TENANT_A},
+        )
+        db.execute(
+            sqltext("INSERT INTO patients (id, mrn, tenant_id) VALUES (:id, 'vault:v1:DLQ', :tid)"),
+            {"id": patient_id, "tid": TENANT_A},
+        )
+        db.execute(
+            sqltext(
+                "INSERT INTO documents (id, patient_id, document_type, source_path,"
+                " ingestion_job_id, embedding_status, tenant_id)"
+                " VALUES (:id, :pid, 'clinical_note', 'r2://test/corrupt.pdf', :jid, 'pending', :tid)"
+            ),
+            {"id": doc_id, "pid": patient_id, "jid": job_id, "tid": TENANT_A},
+        )
 
     with patch(
         "src.workers.batch_worker.get_parser_for_uri",
@@ -85,8 +95,11 @@ async def test_forced_failure_lands_on_dlq_and_marks_document_failed():
         # retries=3 == max_retries -> terminal failure on this attempt
         process_document.apply(
             kwargs={
-                "doc_id": doc_id, "tenant_id": TENANT_A, "job_id": job_id,
-                "r2_uri": "r2://test/corrupt.pdf", "document_type": "clinical_note",
+                "doc_id": doc_id,
+                "tenant_id": TENANT_A,
+                "job_id": job_id,
+                "r2_uri": "r2://test/corrupt.pdf",
+                "document_type": "clinical_note",
             },
             retries=3,
         )
@@ -97,12 +110,22 @@ async def test_forced_failure_lands_on_dlq_and_marks_document_failed():
     assert "simulated corrupt document" in dlq_message["error"]
 
     with get_tenant_sync_session(TENANT_A) as db:
-        doc_row = db.execute(
-            sqltext("SELECT embedding_status FROM documents WHERE id = :id"), {"id": doc_id},
-        ).mappings().fetchone()
-        job_row = db.execute(
-            sqltext("SELECT doc_count_failed FROM ingestion_jobs WHERE id = :id"), {"id": job_id},
-        ).mappings().fetchone()
+        doc_row = (
+            db.execute(
+                sqltext("SELECT embedding_status FROM documents WHERE id = :id"),
+                {"id": doc_id},
+            )
+            .mappings()
+            .fetchone()
+        )
+        job_row = (
+            db.execute(
+                sqltext("SELECT doc_count_failed FROM ingestion_jobs WHERE id = :id"),
+                {"id": job_id},
+            )
+            .mappings()
+            .fetchone()
+        )
 
     assert doc_row["embedding_status"] == "failed"
     assert job_row["doc_count_failed"] == 1

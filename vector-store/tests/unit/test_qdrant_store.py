@@ -4,11 +4,10 @@ is always mocked — no live Qdrant needed to run this file. Live-service
 verification lives in tests/integration/test_vector_store_layer.py.
 """
 
-import os
-
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
 
 def _make_store():
     from src.qdrant_store import QdrantStore
@@ -19,6 +18,7 @@ def _make_store():
         store = QdrantStore("11111111-1111-1111-1111-111111111111")
     return store, mock_client
 
+
 class TestCollectionNaming:
     def test_collection_name_matches_setup_script_convention(self):
         from src.qdrant_store import _collection_name
@@ -26,6 +26,7 @@ class TestCollectionNaming:
         assert _collection_name("11111111-1111-1111-1111-111111111111") == (
             "patient_docs_11111111_1111_1111_1111_111111111111"
         )
+
 
 class TestUpsert:
     @pytest.mark.asyncio
@@ -59,6 +60,7 @@ class TestUpsert:
         second_call_id = client.upsert.call_args.kwargs["points"][0].id
 
         assert first_call_id == second_call_id  # idempotent re-processing
+
 
 class TestSearch:
     @pytest.mark.asyncio
@@ -105,6 +107,7 @@ class TestSearch:
         _, kwargs = client.query_points.call_args
         assert kwargs["query_filter"] is None
 
+
 class TestDelete:
     @pytest.mark.asyncio
     async def test_deletes_by_document_id_match_value(self):
@@ -116,6 +119,7 @@ class TestDelete:
         _, kwargs = client.delete.call_args
         assert kwargs["collection_name"] == store.collection_name
         assert "points_selector" in kwargs
+
 
 class TestHealthCheck:
     @pytest.mark.asyncio

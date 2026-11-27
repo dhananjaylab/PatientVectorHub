@@ -3,6 +3,7 @@
 Keycloak realm import script.
 Imports the patientvectorhub realm, clients, and users from realm.json.
 """
+
 import json
 import sys
 import time
@@ -46,19 +47,16 @@ class KeycloakImporter:
         self.token = None
         self.session = requests.Session()
         self.session.verify = False  # For local dev only
-        
+
     def log(self, message: str, prefix: str = ""):
         print(f"{prefix}{message}")
-    
+
     def get_token(self) -> bool:
         """Obtain admin access token"""
         self.log("Obtaining admin token...")
-        
-        token_url = urljoin(
-            self.keycloak_url,
-            "/realms/master/protocol/openid-connect/token"
-        )
-        
+
+        token_url = urljoin(self.keycloak_url, "/realms/master/protocol/openid-connect/token")
+
         try:
             resp = self.session.post(
                 token_url,
@@ -80,27 +78,27 @@ class KeycloakImporter:
         except Exception as e:
             self.log(f"Error: {e}", "✗ ")
             return False
-    
+
     def get_headers(self) -> dict:
         """Get request headers with authorization"""
         return {
             "Authorization": f"Bearer {self.token}",
             "Content-Type": "application/json",
         }
-    
+
     def import_realm(self) -> bool:
         """Import realm from JSON file"""
         if not self.realm_file.exists():
             self.log(f"Error: {self.realm_file} not found", "✗ ")
             return False
-        
+
         self.log("Importing realm...")
-        
+
         with open(self.realm_file) as f:
             realm_json = json.load(f)
-        
+
         realm_url = urljoin(self.keycloak_url, "/admin/realms")
-        
+
         try:
             resp = self.session.post(
                 realm_url,
@@ -121,16 +119,13 @@ class KeycloakImporter:
         except Exception as e:
             self.log(f"Error: {e}", "✗ ")
             return False
-    
+
     def verify_realm(self) -> bool:
         """Verify realm was created"""
         self.log("Verifying realm...")
-        
-        realm_url = urljoin(
-            self.keycloak_url,
-            "/admin/realms/patientvectorhub"
-        )
-        
+
+        realm_url = urljoin(self.keycloak_url, "/admin/realms/patientvectorhub")
+
         try:
             resp = self.session.get(
                 realm_url,
@@ -143,16 +138,13 @@ class KeycloakImporter:
         except Exception as e:
             self.log(f"Error: {e}", "✗ ")
             return False
-    
+
     def verify_clients(self) -> bool:
         """Verify pvh-spa client exists"""
         self.log("Verifying pvh-spa client...")
-        
-        clients_url = urljoin(
-            self.keycloak_url,
-            "/admin/realms/patientvectorhub/clients"
-        )
-        
+
+        clients_url = urljoin(self.keycloak_url, "/admin/realms/patientvectorhub/clients")
+
         try:
             resp = self.session.get(
                 clients_url,
@@ -161,12 +153,9 @@ class KeycloakImporter:
             )
             resp.raise_for_status()
             clients = resp.json()
-            
-            pvh_spa = next(
-                (c for c in clients if c.get("clientId") == "pvh-spa"),
-                None
-            )
-            
+
+            pvh_spa = next((c for c in clients if c.get("clientId") == "pvh-spa"), None)
+
             if pvh_spa:
                 self.log(f"Found pvh-spa client (ID: {pvh_spa['id']})", "✓ ")
                 self.log(f"  - Public: {pvh_spa.get('publicClient')}")
@@ -268,16 +257,13 @@ class KeycloakImporter:
         except Exception as e:
             self.log(f"Error: {e}", "✗ ")
             return False
-    
+
     def verify_users(self) -> bool:
         """Verify test users exist"""
         self.log("Verifying test users...")
-        
-        users_url = urljoin(
-            self.keycloak_url,
-            "/admin/realms/patientvectorhub/users"
-        )
-        
+
+        users_url = urljoin(self.keycloak_url, "/admin/realms/patientvectorhub/users")
+
         try:
             resp = self.session.get(
                 users_url,
@@ -286,7 +272,7 @@ class KeycloakImporter:
             )
             resp.raise_for_status()
             users = resp.json()
-            
+
             if users:
                 self.log(f"Found {len(users)} users", "✓ ")
                 for user in users:
@@ -298,7 +284,7 @@ class KeycloakImporter:
         except Exception as e:
             self.log(f"Error: {e}", "✗ ")
             return False
-    
+
     def run(self) -> bool:
         """Run the full import process"""
         print("=" * 50)
@@ -307,22 +293,22 @@ class KeycloakImporter:
         print(f"Keycloak URL: {self.keycloak_url}")
         print(f"Realm file: {self.realm_file}")
         print()
-        
+
         if not self.get_token():
             return False
         print()
-        
+
         if not self.import_realm():
             return False
         print()
-        
+
         # Small delay to allow realm to be created
         time.sleep(1)
-        
+
         if not self.verify_realm():
             return False
         print()
-        
+
         if not self.verify_clients():
             return False
         print()
@@ -334,7 +320,7 @@ class KeycloakImporter:
         if not self.verify_users():
             return False
         print()
-        
+
         print("✅ Realm import completed successfully!")
         print()
         print("You can now log in with:")
@@ -342,16 +328,14 @@ class KeycloakImporter:
         print("  Username: admin@tenant1.test")
         print("  Password: test-password-123")
         print()
-        
+
         return True
 
 
 if __name__ == "__main__":
     import argparse
-    
-    parser = argparse.ArgumentParser(
-        description="Import Keycloak realm and users"
-    )
+
+    parser = argparse.ArgumentParser(description="Import Keycloak realm and users")
     parser.add_argument(
         "--url",
         default="http://localhost:8080",
@@ -373,15 +357,15 @@ if __name__ == "__main__":
         default=str(Path(__file__).with_name("realm.json")),
         help="Realm JSON file (default: bundled realm.json)",
     )
-    
+
     args = parser.parse_args()
-    
+
     importer = KeycloakImporter(
         keycloak_url=args.url,
         admin_user=args.user,
         admin_pass=args.password,
         realm_file=args.file,
     )
-    
+
     success = importer.run()
     sys.exit(0 if success else 1)

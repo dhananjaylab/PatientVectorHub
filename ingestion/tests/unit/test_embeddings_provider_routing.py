@@ -4,11 +4,10 @@ Unit tests for ingestion/src/embeddings/__init__.py's provider dispatch
 runs, since before this ADR it was a config field nothing read.
 """
 
-import os
-
 from unittest.mock import AsyncMock, patch
 
 import pytest
+
 
 @pytest.fixture(autouse=True)
 def _restore_provider():
@@ -17,6 +16,7 @@ def _restore_provider():
     original = settings.EMBEDDING_PROVIDER
     yield
     settings.EMBEDDING_PROVIDER = original
+
 
 class TestEmbeddingProviderDispatch:
     @pytest.mark.asyncio

@@ -7,9 +7,10 @@ docs/PHASE_4_IMPLEMENTATION_PLAN.md footnote [4]. Do not point this at
 real PHI without re-confirming ADR-009's BAA caveat — see
 ingestion/src/config.py's ALLOW_REAL_PHI / PHI_BAA_ACKNOWLEDGED guardrail.
 """
+
 import logging
 
-from openai import AsyncOpenAI, APIConnectionError, APITimeoutError, RateLimitError
+from openai import APIConnectionError, APITimeoutError, AsyncOpenAI, RateLimitError
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from ..config import settings
@@ -42,13 +43,15 @@ def _get_client() -> AsyncOpenAI:
 )
 async def _embed_one_batch(texts: list[str]) -> list[list[float]]:
     response = await _get_client().embeddings.create(
-        model=settings.EMBEDDING_MODEL_VERSION,      # "text-embedding-3-large"
+        model=settings.EMBEDDING_MODEL_VERSION,  # "text-embedding-3-large"
         input=texts,
-        dimensions=settings.EMBEDDING_DIMENSIONS,     # 1536, Matryoshka-shortened (ADR-009)
+        dimensions=settings.EMBEDDING_DIMENSIONS,  # 1536, Matryoshka-shortened (ADR-009)
     )
     log.info(
         "embedded batch: n_texts=%d tokens=%d model=%s",
-        len(texts), response.usage.total_tokens, settings.EMBEDDING_MODEL_VERSION,
+        len(texts),
+        response.usage.total_tokens,
+        settings.EMBEDDING_MODEL_VERSION,
     )
     return [d.embedding for d in response.data]
 

@@ -1,14 +1,13 @@
 """
 Unit tests for api-gateway/src/observability.py (Phase 10 / ADR-017).
 """
+
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
-
 from src import observability
 
 

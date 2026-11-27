@@ -15,6 +15,7 @@ both packages (parsing/chunking/embedding on one side, vector storage on
 the other). See MANUAL_INTEGRATION_NOTES.md for the cross-service import
 wiring this implies.
 """
+
 from dataclasses import dataclass
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter

@@ -46,6 +46,7 @@ Only wired into the app when settings.AUTH_ENABLED=true (see main.py) —
 local dev defaults to AUTH_ENABLED=false so Phase 2/3 work doesn't require
 a running Keycloak container to iterate.
 """
+
 from __future__ import annotations
 
 import logging
@@ -102,7 +103,9 @@ class KeycloakJWTMiddleware(BaseHTTPMiddleware):
         api_key = request.headers.get("X-API-Key")
 
         if auth_header.startswith("Bearer "):
-            error = await self._authenticate_jwt(request, auth_header.removeprefix("Bearer ").strip())
+            error = await self._authenticate_jwt(
+                request, auth_header.removeprefix("Bearer ").strip()
+            )
             if error is not None:
                 return error
         elif api_key:
@@ -117,9 +120,7 @@ class KeycloakJWTMiddleware(BaseHTTPMiddleware):
 
     async def _authenticate_jwt(self, request: Request, token: str) -> JSONResponse | None:
         try:
-            signing_key = await run_in_threadpool(
-                self._jwks_client.get_signing_key_from_jwt, token
-            )
+            signing_key = await run_in_threadpool(self._jwks_client.get_signing_key_from_jwt, token)
             payload = jwt.decode(
                 token,
                 signing_key.key,
@@ -193,7 +194,12 @@ class KeycloakJWTMiddleware(BaseHTTPMiddleware):
             # to the same generic response, deliberately indistinguishable
             # from the caller's perspective.
             return JSONResponse(
-                {"error": {"code": "AUTHENTICATION_FAILED", "message": "Invalid or expired API key"}},
+                {
+                    "error": {
+                        "code": "AUTHENTICATION_FAILED",
+                        "message": "Invalid or expired API key",
+                    }
+                },
                 status_code=401,
             )
 
@@ -216,12 +222,7 @@ class KeycloakJWTMiddleware(BaseHTTPMiddleware):
     def _normalize_tenant_id(value) -> str | None:
         if isinstance(value, str) and value:
             return value
-        if (
-            isinstance(value, list)
-            and len(value) == 1
-            and isinstance(value[0], str)
-            and value[0]
-        ):
+        if isinstance(value, list) and len(value) == 1 and isinstance(value[0], str) and value[0]:
             return value[0]
         return None
 

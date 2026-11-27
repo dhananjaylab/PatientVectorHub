@@ -12,6 +12,7 @@ API used here (verified against python-hl7's current docs):
   - message.segments(id)  -> list of all matching Segments, KeyError if none
   - segment[n]             -> field n (0 = segment ID itself)
 """
+
 import hl7
 
 from .r2_client import get_object_bytes

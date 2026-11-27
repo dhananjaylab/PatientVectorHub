@@ -57,7 +57,7 @@ def _mock_log_row(**overrides) -> dict:
         "ip_address": "10.0.0.5",
         "request_id": "req-abc",
         "status_code": 200,
-        "created_at": datetime.datetime(2026, 8, 15, 12, 0, 0, tzinfo=datetime.timezone.utc),
+        "created_at": datetime.datetime(2026, 8, 15, 12, 0, 0, tzinfo=datetime.UTC),
     }
     row.update(overrides)
     return row
@@ -262,7 +262,9 @@ class TestExportAuditLogs:
         assert "attachment" in resp.headers["content-disposition"]
         assert resp.headers["content-disposition"].endswith('.csv"')
         body_text = resp.text
-        assert "id,user_id,action,patient_id,ip_address,request_id,status_code,created_at" in body_text
+        assert (
+            "id,user_id,action,patient_id,ip_address,request_id,status_code,created_at" in body_text
+        )
         assert "phi_reveal" in body_text
 
     @pytest.mark.asyncio

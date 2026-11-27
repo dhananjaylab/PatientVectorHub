@@ -42,6 +42,7 @@ Phase 10 additions (Observability & Security):
   ("cache Vault-encrypted MRN values in Redis (1h TTL)"), not a value
   invented for this phase.
 """
+
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -97,7 +98,7 @@ def normalize_asyncpg_pool_url(raw_url: str) -> str:
     """
     normalized = normalize_asyncpg_url(raw_url)
     if normalized.startswith("postgresql+asyncpg://"):
-        return "postgresql://" + normalized[len("postgresql+asyncpg://"):]
+        return "postgresql://" + normalized[len("postgresql+asyncpg://") :]
     if normalized.startswith("postgresql://"):
         return normalized
     return raw_url.strip()
@@ -112,12 +113,8 @@ class Settings(BaseSettings):
     )
 
     # ── Database ─────────────────────────────────────────────────────────────
-    DATABASE_URL: str = (
-        "postgresql+asyncpg://pvh:pvh_local@localhost:5432/pvh"
-    )
-    DATABASE_URL_SYNC: str = (
-        "postgresql+psycopg2://pvh:pvh_local@localhost:5432/pvh"
-    )
+    DATABASE_URL: str = "postgresql+asyncpg://pvh:pvh_local@localhost:5432/pvh"
+    DATABASE_URL_SYNC: str = "postgresql+psycopg2://pvh:pvh_local@localhost:5432/pvh"
 
     # ── Cache & Messaging ─────────────────────────────────────────────────────
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -143,7 +140,6 @@ class Settings(BaseSettings):
     QDRANT_PORT: int = 6333
     QDRANT_URL: str = ""
     QDRANT_API_KEY: str = ""
-
 
     # ── Embedding ─────────────────────────────────────────────────────────────
     EMBEDDING_PROVIDER: str = "openai"
@@ -211,9 +207,7 @@ class Settings(BaseSettings):
     # ── App ───────────────────────────────────────────────────────────────────
     API_HOST: str = "0.0.0.0"
     API_PORT: int = 8000
-    CORS_ORIGINS: str = (
-        "http://localhost:5173,http://localhost:3000,https://app.pvh.internal"
-    )
+    CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000,https://app.pvh.internal"
 
     # ── Rate limiting (Phase 8 / ADR-015) ────────────────────────────────────
     RATE_LIMIT_ENABLED: bool = True

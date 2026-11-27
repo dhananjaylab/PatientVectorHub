@@ -153,5 +153,3 @@ async def rag_query(
         ],
         latency_ms=latency_ms,
     )
-
-

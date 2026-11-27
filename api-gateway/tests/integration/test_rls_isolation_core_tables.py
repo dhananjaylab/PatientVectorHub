@@ -22,13 +22,13 @@ Compose's bootstrap-superuser `pvh`, for instance) — running these
 assertions against a bypassing role produces a false failure, not a
 "passes for the wrong reason."
 """
+
 import os
 import uuid
 from pathlib import Path
 
-from dotenv import load_dotenv
 import pytest
-
+from dotenv import load_dotenv
 from src.config import normalize_asyncpg_url
 
 load_dotenv(Path(__file__).resolve().parents[3] / ".env")
@@ -38,7 +38,7 @@ pytestmark = pytest.mark.integration
 # Skip entire module if SKIP_INTEGRATION_TESTS is set
 skip_integration = pytest.mark.skipif(
     os.getenv("SKIP_INTEGRATION_TESTS", "").lower() in ("true", "1", "yes"),
-    reason="Integration tests skipped (SKIP_INTEGRATION_TESTS=true)"
+    reason="Integration tests skipped (SKIP_INTEGRATION_TESTS=true)",
 )
 
 _RAW_URL = (
@@ -51,6 +51,7 @@ POSTGRES_URL = normalize_asyncpg_url(_RAW_URL)
 TENANT_A = str(uuid.uuid4())
 TENANT_B = str(uuid.uuid4())
 
+
 async def _current_user_bypasses_rls(conn) -> bool:
     """See test_rls_isolation.py's identical helper for the full rationale
     — checks both rolsuper and rolbypassrls, since they're independent
@@ -59,21 +60,29 @@ async def _current_user_bypasses_rls(conn) -> bool:
         "SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user"
     )
 
+
 async def _make_tenant(conn, tenant_id: str, name: str) -> None:
     await conn.execute(
         "INSERT INTO tenants (id, name, namespace, plan, created_at) "
         "VALUES ($1, $2, $3, 'enterprise', NOW()) ON CONFLICT (id) DO NOTHING",
-        tenant_id, name, f"ns_{tenant_id[:8]}",
+        tenant_id,
+        name,
+        f"ns_{tenant_id[:8]}",
     )
+
 
 async def _make_user(conn, tenant_id: str) -> str:
     user_id = str(uuid.uuid4())
     await conn.execute(
         "INSERT INTO users (id, email, keycloak_subject, role, tenant_id) "
         "VALUES ($1, $2, $3, 'engineer', $4)",
-        user_id, f"{user_id}@rls-test.local", f"kc-{user_id}", tenant_id,
+        user_id,
+        f"{user_id}@rls-test.local",
+        f"kc-{user_id}",
+        tenant_id,
     )
     return user_id
+
 
 class TestNewTablesRLSEnabled:
     """Sanity checks that migration 004 actually applied RLS — fail fast
@@ -86,6 +95,7 @@ class TestNewTablesRLSEnabled:
     )
     async def test_force_rls_enabled(self, table):
         import asyncpg
+
         conn = await asyncpg.connect(POSTGRES_URL)
         try:
             row = await conn.fetchrow(
@@ -98,11 +108,13 @@ class TestNewTablesRLSEnabled:
         finally:
             await conn.close()
 
+
 class TestCrossTenantIsolationNewTables:
     @pytest.mark.asyncio
     @skip_integration
     async def test_ingestion_jobs_and_api_keys_isolated_by_tenant(self):
         import asyncpg
+
         conn = await asyncpg.connect(POSTGRES_URL)
         try:
             if await _current_user_bypasses_rls(conn):
@@ -117,36 +129,32 @@ class TestCrossTenantIsolationNewTables:
                 await _make_tenant(conn, TENANT_A, "RLS Test Tenant A")
                 await _make_tenant(conn, TENANT_B, "RLS Test Tenant B")
 
-                await conn.execute(
-                    "SELECT set_config('app.tenant_id', $1, true)", TENANT_A
-                )
+                await conn.execute("SELECT set_config('app.tenant_id', $1, true)", TENANT_A)
                 user_a = await _make_user(conn, TENANT_A)
                 await conn.execute(
                     "INSERT INTO ingestion_jobs (id, name, status, source_type, "
                     "created_by, tenant_id) VALUES (gen_random_uuid(), 'job', "
                     "'queued', 's3_batch', $1, $2)",
-                    user_a, TENANT_A,
+                    user_a,
+                    TENANT_A,
                 )
                 await conn.execute(
                     "INSERT INTO api_keys (id, key_hash, name, scopes, user_id, "
                     "tenant_id, expires_at) VALUES (gen_random_uuid(), 'hash123', "
                     "'key', ARRAY['query:read'], $1, $2, NOW() + INTERVAL '90 days')",
-                    user_a, TENANT_A,
+                    user_a,
+                    TENANT_A,
                 )
 
                 # Scope to tenant B — must see zero rows for both tables.
-                await conn.execute(
-                    "SELECT set_config('app.tenant_id', $1, true)", TENANT_B
-                )
+                await conn.execute("SELECT set_config('app.tenant_id', $1, true)", TENANT_B)
                 jobs_as_b = await conn.fetchval("SELECT COUNT(*) FROM ingestion_jobs")
                 keys_as_b = await conn.fetchval("SELECT COUNT(*) FROM api_keys")
                 assert jobs_as_b == 0, f"Tenant B saw {jobs_as_b} of tenant A's ingestion_jobs"
                 assert keys_as_b == 0, f"Tenant B saw {keys_as_b} of tenant A's api_keys"
 
                 # Sanity — the owning tenant must still see its own rows.
-                await conn.execute(
-                    "SELECT set_config('app.tenant_id', $1, true)", TENANT_A
-                )
+                await conn.execute("SELECT set_config('app.tenant_id', $1, true)", TENANT_A)
                 jobs_as_a = await conn.fetchval("SELECT COUNT(*) FROM ingestion_jobs")
                 assert jobs_as_a == 1
             finally:
@@ -154,11 +162,13 @@ class TestCrossTenantIsolationNewTables:
         finally:
             await conn.close()
 
+
 class TestAuditLogsAppendOnly:
     @pytest.mark.asyncio
     @skip_integration
     async def test_insert_with_matching_tenant_succeeds(self):
         import asyncpg
+
         conn = await asyncpg.connect(POSTGRES_URL)
         try:
             if await _current_user_bypasses_rls(conn):
@@ -168,9 +178,7 @@ class TestAuditLogsAppendOnly:
             await tx.start()
             try:
                 await _make_tenant(conn, TENANT_A, "Audit Tenant A")
-                await conn.execute(
-                    "SELECT set_config('app.tenant_id', $1, true)", TENANT_A
-                )
+                await conn.execute("SELECT set_config('app.tenant_id', $1, true)", TENANT_A)
                 row_id = await conn.fetchval(
                     "INSERT INTO audit_logs (action, tenant_id, status_code) "
                     "VALUES ('user_login', $1, 200) RETURNING id",
@@ -186,6 +194,7 @@ class TestAuditLogsAppendOnly:
     @skip_integration
     async def test_insert_with_spoofed_tenant_is_rejected(self):
         import asyncpg
+
         conn = await asyncpg.connect(POSTGRES_URL)
         try:
             if await _current_user_bypasses_rls(conn):
@@ -196,9 +205,7 @@ class TestAuditLogsAppendOnly:
             try:
                 await _make_tenant(conn, TENANT_A, "Audit Tenant A")
                 await _make_tenant(conn, TENANT_B, "Audit Tenant B")
-                await conn.execute(
-                    "SELECT set_config('app.tenant_id', $1, true)", TENANT_A
-                )
+                await conn.execute("SELECT set_config('app.tenant_id', $1, true)", TENANT_A)
                 with pytest.raises(asyncpg.exceptions.InsufficientPrivilegeError):
                     await conn.execute(
                         "INSERT INTO audit_logs (action, tenant_id, status_code) "
@@ -220,6 +227,7 @@ class TestAuditLogsAppendOnly:
         that command rather than raising, so both commands report 0 rows
         affected here."""
         import asyncpg
+
         conn = await asyncpg.connect(POSTGRES_URL)
         try:
             if await _current_user_bypasses_rls(conn):
@@ -229,9 +237,7 @@ class TestAuditLogsAppendOnly:
             await tx.start()
             try:
                 await _make_tenant(conn, TENANT_A, "Audit Tenant A")
-                await conn.execute(
-                    "SELECT set_config('app.tenant_id', $1, true)", TENANT_A
-                )
+                await conn.execute("SELECT set_config('app.tenant_id', $1, true)", TENANT_A)
                 await conn.execute(
                     "INSERT INTO audit_logs (action, tenant_id, status_code) "
                     "VALUES ('user_login', $1, 200)",
@@ -241,12 +247,16 @@ class TestAuditLogsAppendOnly:
                 update_result = await conn.execute(
                     "UPDATE audit_logs SET status_code = 999 WHERE action = 'user_login'"
                 )
-                assert update_result == "UPDATE 0", f"Expected UPDATE to affect 0 rows, got: {update_result}"
+                assert update_result == "UPDATE 0", (
+                    f"Expected UPDATE to affect 0 rows, got: {update_result}"
+                )
 
                 delete_result = await conn.execute(
                     "DELETE FROM audit_logs WHERE action = 'user_login'"
                 )
-                assert delete_result == "DELETE 0", f"Expected DELETE to affect 0 rows, got: {delete_result}"
+                assert delete_result == "DELETE 0", (
+                    f"Expected DELETE to affect 0 rows, got: {delete_result}"
+                )
 
                 # The row must still be there, untouched.
                 count = await conn.fetchval("SELECT COUNT(*) FROM audit_logs")
@@ -255,6 +265,7 @@ class TestAuditLogsAppendOnly:
                 await tx.rollback()
         finally:
             await conn.close()
+
 
 class TestApiKeyResolverFailsClosed:
     """ADR-010: resolve_api_key_tenant() must return zero rows for a
@@ -269,6 +280,7 @@ class TestApiKeyResolverFailsClosed:
     @skip_integration
     async def test_returns_zero_rows_for_unprivileged_caller(self):
         import asyncpg
+
         conn = await asyncpg.connect(POSTGRES_URL)
         try:
             if await _current_user_bypasses_rls(conn):

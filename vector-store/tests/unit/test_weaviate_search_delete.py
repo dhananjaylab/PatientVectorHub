@@ -5,11 +5,10 @@ to run this file. Live-service verification lives in
 tests/integration/test_vector_store_layer.py instead.
 """
 
-import os
-
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 
 def _make_store():
     """Construct a WeaviateStore with _connect() mocked out, so __init__
@@ -25,6 +24,7 @@ def _make_store():
         mock_connect.return_value = mock_client
         store = WeaviateStore("tenant-a")
     return store, mock_tenant_collection
+
 
 class TestSearch:
     @pytest.mark.asyncio
@@ -82,6 +82,7 @@ class TestSearch:
         results = await store.search("q", [0.1])
 
         assert results[0].score == 0.0
+
 
 class TestDelete:
     @pytest.mark.asyncio

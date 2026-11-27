@@ -17,13 +17,19 @@ because SET/SET LOCAL cannot take bound parameters over the wire
 protocol. `is_local=true` scopes the value to the current transaction, so
 it can never leak across requests on a pooled connection.
 """
+
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from ..config import normalize_asyncpg_url, settings
 
@@ -98,5 +104,3 @@ async def get_untenanted_session() -> AsyncIterator[AsyncSession]:
 async def dispose_engine() -> None:
     """Call from the FastAPI lifespan shutdown handler."""
     await _engine.dispose()
-
-

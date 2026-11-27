@@ -13,6 +13,7 @@ that never touches the network on its own, so unit tests can call it with
 no live R2 credentials at all. Anything that actually fetches bytes
 (get_object_bytes) is mocked out in tests/unit/test_ingestion_parsers.py.
 """
+
 import boto3
 from botocore.config import Config
 

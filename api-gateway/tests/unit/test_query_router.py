@@ -13,13 +13,12 @@ mocked at the module level query.py imported them into — no live vector
 store or LLM call needed to run this file.
 """
 
-import os
-
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+
 
 def _build_app(role: str = "analyst", tenant_id: str = "tenant-a", user_id: str = "user-1"):
     from src.deps import get_db
@@ -59,6 +58,7 @@ def _build_app(role: str = "analyst", tenant_id: str = "tenant-a", user_id: str 
     app.dependency_overrides[get_db] = _fake_get_db
     return app
 
+
 def _mock_search_result(
     doc_id="d-001",
     chunk_text="HbA1c 8.4% elevated",
@@ -70,6 +70,7 @@ def _mock_search_result(
     return SearchResult(
         doc_id=doc_id, chunk_text=chunk_text, score=score, document_type=document_type
     )
+
 
 class TestRAGQueryRoute:
     @pytest.mark.asyncio

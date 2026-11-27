@@ -334,7 +334,7 @@ The `PatientDocument` Weaviate collection uses **native multi-tenancy** — one 
 
 ```python
 collection = client.collections.get("PatientDocument")
-tenant_col = collection.with_tenant(tenant_id)   # shard-scoped — cross-tenant reads are impossible
+tenant_col = collection.with_tenant(tenant_id)  # shard-scoped — cross-tenant reads are impossible
 
 tenant_col.data.insert({"chunk_text": "...", "document_id": "..."}, vector=[...])
 tenant_col.query.near_vector(near_vector=[...], limit=10)

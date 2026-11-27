@@ -19,6 +19,7 @@ Every case below drives the request from the lowest role that should
 be refused (readonly, or one step below the actual requirement) at the
 real mounted router, not from a synthetic test double for that router.
 """
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock
@@ -74,10 +75,16 @@ class TestFunctionLevelAuthorizationBypass:
 
         app = _build_app(router, "/v1/ingest", role="readonly")
         resp = await _request(
-            app, "POST", "/v1/ingest/jobs",
-            json={"name": "x", "source_type": "api_push",
-                  "documents": [{"source_path": "r2://x", "document_type": "lab_result",
-                                  "patient_id": "p1"}]},
+            app,
+            "POST",
+            "/v1/ingest/jobs",
+            json={
+                "name": "x",
+                "source_type": "api_push",
+                "documents": [
+                    {"source_path": "r2://x", "document_type": "lab_result", "patient_id": "p1"}
+                ],
+            },
         )
         assert resp.status_code == 403
 
@@ -131,9 +138,7 @@ class TestFunctionLevelAuthorizationBypass:
         from src.routers.query import router
 
         app = _build_app(router, "/v1/query", role="readonly")
-        resp = await _request(
-            app, "POST", "/v1/query", json={"query_text": "test", "top_k": 5}
-        )
+        resp = await _request(app, "POST", "/v1/query", json={"query_text": "test", "top_k": 5})
         assert resp.status_code == 403
 
     @pytest.mark.asyncio
@@ -145,9 +150,7 @@ class TestFunctionLevelAuthorizationBypass:
         from src.routers.query import router
 
         app = _build_app(router, "/v1/query", role="analyst")
-        resp = await _request(
-            app, "POST", "/v1/query", json={"query_text": "test", "top_k": 5}
-        )
+        resp = await _request(app, "POST", "/v1/query", json={"query_text": "test", "top_k": 5})
         # Not asserting 200 -- that needs a real retriever/DB, out of
         # scope for this harness (AsyncMock stands in for get_db, not
         # the retrieval pipeline). Asserting it does NOT fail with 403
