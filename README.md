@@ -281,6 +281,10 @@ Synthetic users created by `infra\scripts\seed_data.py`:
 All synthetic test users share the Keycloak password:
 
 ```text
+bin\kc.bat start-dev --bootstrap-admin-username=admin --bootstrap-admin-password=admin
+```
+
+```text
 test-password-123
 ```
 

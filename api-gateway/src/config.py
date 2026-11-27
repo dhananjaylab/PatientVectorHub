@@ -90,6 +90,19 @@ def normalize_asyncpg_url(raw_url: str) -> str:
     )
 
 
+def normalize_asyncpg_pool_url(raw_url: str) -> str:
+    """Convert an asyncpg URL to the plain postgresql scheme accepted by
+    asyncpg.create_pool(). SQLAlchemy engines require postgresql+asyncpg,
+    but asyncpg itself rejects SQLAlchemy driver suffixes.
+    """
+    normalized = normalize_asyncpg_url(raw_url)
+    if normalized.startswith("postgresql+asyncpg://"):
+        return "postgresql://" + normalized[len("postgresql+asyncpg://"):]
+    if normalized.startswith("postgresql://"):
+        return normalized
+    return raw_url.strip()
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=Path(__file__).resolve().parents[2] / ".env",

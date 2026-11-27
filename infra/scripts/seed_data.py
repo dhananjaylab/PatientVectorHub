@@ -171,6 +171,11 @@ def get_database_url() -> str:
     parts = urlsplit(url)
     query = dict(parse_qsl(parts.query, keep_blank_values=True))
 
+    # Provider DSNs commonly use `ssl`, but psycopg2 only accepts `sslmode`.
+    ssl = query.pop("ssl", None)
+    if ssl is not None:
+        query.setdefault("sslmode", ssl)
+
     # Aiven requires SSL; psycopg2 expects sslmode in the URL query string.
     if "aivencloud.com" in (parts.hostname or ""):
         query.setdefault("sslmode", "require")
