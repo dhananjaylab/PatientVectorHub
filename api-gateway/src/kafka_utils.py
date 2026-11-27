@@ -30,6 +30,7 @@ async def publish_document_ingest(
     chunk_size: int,
     chunk_overlap: int,
 ) -> None:
+    correlation_id = str(uuid.uuid4())
     payload = {
         "doc_id": doc_id,
         "job_id": job_id,
@@ -39,11 +40,11 @@ async def publish_document_ingest(
         "model": embedding_model,
         "chunk_size": chunk_size,
         "chunk_overlap": chunk_overlap,
-        "correlation_id": str(uuid.uuid4()),
+        "correlation_id": correlation_id,
     }
     await producer.send_and_wait(
         topic="doc-ingest",
         key=tenant_id.encode(),  # partition key = tenant -> ordered per tenant
         value=json.dumps(payload).encode(),
-        headers=[(b"correlation-id", payload["correlation_id"].encode())],
+        headers=[(b"correlation-id", correlation_id.encode())],
     )

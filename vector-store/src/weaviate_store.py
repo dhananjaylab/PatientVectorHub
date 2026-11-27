@@ -55,11 +55,12 @@ def _chunk_uuid(doc_id: str, chunk_index: int) -> str:
 
 def _connect() -> weaviate.WeaviateClient:
     if settings.WEAVIATE_URL:
+        api_key = settings.WEAVIATE_API_KEY
+        if not api_key:
+            raise ValueError("WEAVIATE_API_KEY is required when WEAVIATE_URL is set")
         return weaviate.connect_to_weaviate_cloud(
             cluster_url=settings.WEAVIATE_URL,
-            auth_credentials=(
-                Auth.api_key(settings.WEAVIATE_API_KEY) if settings.WEAVIATE_API_KEY else None
-            ),
+            auth_credentials=Auth.api_key(api_key),
         )
     return weaviate.connect_to_local(host=settings.WEAVIATE_HOST, port=settings.WEAVIATE_PORT)
 

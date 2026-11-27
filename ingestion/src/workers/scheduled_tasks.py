@@ -74,13 +74,15 @@ def cleanup_completed_jobs() -> None:
                         "DELETE FROM ingestion_jobs"
                         " WHERE status IN ('completed', 'failed')"
                         "   AND completed_at < NOW() - INTERVAL :age"
+                        " RETURNING id"
                     ),
                     {"age": _STALE_JOB_RETENTION},
                 )
-                if result.rowcount:
+                deleted_count = len(result.fetchall())
+                if deleted_count:
                     log.info(
                         "cleaned up %d stale ingestion_jobs for tenant %s",
-                        result.rowcount,
+                        deleted_count,
                         tenant_id,
                     )
 

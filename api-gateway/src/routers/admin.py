@@ -49,10 +49,12 @@ from ..middleware.rate_limit import limiter
 from ..middleware.rbac import require_min_role, require_role
 from ..schemas.admin import (
     ApiKeyListResponse,
+    ApiKeySummary,
     CreateApiKeyRequest,
     CreateApiKeyResponse,
     NamespaceHealthResponse,
     UserListResponse,
+    UserSummary,
 )
 
 router = APIRouter()
@@ -127,14 +129,16 @@ async def list_keys(request: Request, response: Response, db=Depends(get_db)) ->
     rows = await crud.list_api_keys(db)
     return ApiKeyListResponse(
         api_keys=[
-            {
-                **r,
-                "id": str(r["id"]),
-                "user_id": str(r["user_id"]),
-                "expires_at": r["expires_at"].isoformat(),
-                "last_used_at": r["last_used_at"].isoformat() if r["last_used_at"] else None,
-                "created_at": r["created_at"].isoformat(),
-            }
+            ApiKeySummary.model_validate(
+                {
+                    **r,
+                    "id": str(r["id"]),
+                    "user_id": str(r["user_id"]),
+                    "expires_at": r["expires_at"].isoformat(),
+                    "last_used_at": r["last_used_at"].isoformat() if r["last_used_at"] else None,
+                    "created_at": r["created_at"].isoformat(),
+                }
+            )
             for r in rows
         ]
     )
@@ -146,12 +150,14 @@ async def get_users(request: Request, response: Response, db=Depends(get_db)) ->
     rows = await crud.list_users(db)
     return UserListResponse(
         users=[
-            {
-                **r,
-                "id": str(r["id"]),
-                "last_login": r["last_login"].isoformat() if r["last_login"] else None,
-                "created_at": r["created_at"].isoformat(),
-            }
+            UserSummary.model_validate(
+                {
+                    **r,
+                    "id": str(r["id"]),
+                    "last_login": r["last_login"].isoformat() if r["last_login"] else None,
+                    "created_at": r["created_at"].isoformat(),
+                }
+            )
             for r in rows
         ]
     )

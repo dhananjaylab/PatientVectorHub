@@ -144,7 +144,10 @@ def encrypt_phi_sync(plaintext: str) -> str:
         name=settings.VAULT_TRANSIT_KEY,
         plaintext=b64_plaintext,
     )
-    return response["data"]["ciphertext"]
+    ciphertext = response["data"]["ciphertext"]
+    if not isinstance(ciphertext, str):
+        raise TypeError("Vault Transit returned a non-string ciphertext")
+    return ciphertext
 
 
 def decrypt_phi_sync(ciphertext: str) -> str:

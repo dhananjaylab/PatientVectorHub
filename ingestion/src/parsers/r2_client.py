@@ -56,4 +56,7 @@ def get_object_bytes(uri: str) -> bytes:
     """Fetch an object's raw bytes from R2 given an r2:// URI."""
     bucket, key = parse_r2_uri(uri)
     client = get_r2_client()
-    return client.get_object(Bucket=bucket, Key=key)["Body"].read()
+    content = client.get_object(Bucket=bucket, Key=key)["Body"].read()
+    if not isinstance(content, bytes):
+        raise TypeError("R2 returned a non-bytes object body")
+    return content

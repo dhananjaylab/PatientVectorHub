@@ -97,7 +97,7 @@ def _resolve_effective_user_id(user: dict, requested_user_id: str | None) -> str
     """
     if user["role"] in ("admin", "auditor"):
         return requested_user_id
-    return user["user_id"]
+    return str(user["user_id"])
 
 
 @router.get(

@@ -78,17 +78,17 @@ def process_document(
         vectors = asyncio.run(embed_batch([c.text for c in raw_chunks]))
         chunks = _to_vector_chunks(raw_chunks, document_type, patient_id_hash)
 
-        import inspect
-
         from vector_store.interface import get_store  # local import — see module docstring
 
         store = get_store(tenant_id)
+
+        async def upsert_chunks() -> None:
+            await store.upsert(doc_id, chunks, vectors)
+
         try:
-            asyncio.run(store.upsert(doc_id, chunks, vectors))
+            asyncio.run(upsert_chunks())
         finally:
-            close_result = store.close()
-            if inspect.isawaitable(close_result):
-                asyncio.run(close_result)
+            asyncio.run(store.close())
 
         update_document_embedding_status(
             tenant_id,

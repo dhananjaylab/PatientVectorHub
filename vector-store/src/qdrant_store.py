@@ -88,16 +88,21 @@ class QdrantStore(VectorStoreInterface):
             limit=top_k,
             with_payload=True,
         )
-        return [
-            SearchResult(
-                doc_id=p.payload["document_id"],
-                chunk_text=p.payload["chunk_text"],
-                score=p.score,
-                document_type=p.payload.get("document_type", ""),
-                metadata=p.payload,
+        results = []
+        for point in response.points:
+            payload = point.payload
+            if payload is None:
+                raise ValueError(f"Qdrant returned a point without payload: {point.id}")
+            results.append(
+                SearchResult(
+                    doc_id=payload["document_id"],
+                    chunk_text=payload["chunk_text"],
+                    score=point.score,
+                    document_type=payload.get("document_type", ""),
+                    metadata=payload,
+                )
             )
-            for p in response.points
-        ]
+        return results
 
     async def delete(self, doc_id: str) -> None:
         await self._client.delete(
@@ -124,7 +129,8 @@ def _build_filter(filters: dict | None) -> Filter | None:
     7)."""
     if not filters:
         return None
-    must = []
     if document_types := filters.get("document_types"):
-        must.append(FieldCondition(key="document_type", match=MatchAny(any=document_types)))
-    return Filter(must=must) if must else None
+        return Filter(
+            must=[FieldCondition(key="document_type", match=MatchAny(any=document_types))]
+        )
+    return None
